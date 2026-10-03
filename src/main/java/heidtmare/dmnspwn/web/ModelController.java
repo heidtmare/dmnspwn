@@ -30,7 +30,6 @@ import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.store.ModelService;
-import heidtmare.dmnspwn.validate.DmnValidator;
 
 /** Model overview (DRD), model-level edits, source view and export. */
 @Controller
@@ -204,7 +203,6 @@ public class ModelController {
     public String validation(@PathVariable String id, Model model) {
         DmnReader reader = models.reader(id);
         PageSupport.common(model, id, reader, models);
-        model.addAttribute("issues", DmnValidator.validate(reader));
         return "validation";
     }
 

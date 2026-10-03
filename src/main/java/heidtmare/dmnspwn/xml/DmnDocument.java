@@ -1,8 +1,10 @@
 package heidtmare.dmnspwn.xml;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.xml.XMLConstants;
@@ -21,6 +23,8 @@ public final class DmnDocument {
 
     private final Document dom;
     private final Element definitions;
+    /** Ids in use, collected on the first {@link #uniqueId} call and extended with every id it hands out. */
+    private Set<String> ids;
 
     public DmnDocument(Document dom) {
         Element root = dom.getDocumentElement();
@@ -192,10 +196,20 @@ public final class DmnDocument {
     }
 
     public String uniqueId(String prefix) {
+        if (ids == null) {
+            ids = new HashSet<>();
+            NodeList all = dom.getElementsByTagNameNS("*", "*");
+            for (int i = 0; i < all.getLength(); i++) {
+                String id = ((Element) all.item(i)).getAttribute("id");
+                if (!id.isEmpty()) {
+                    ids.add(id);
+                }
+            }
+        }
         String id;
         do {
             id = prefix + "_" + UUID.randomUUID().toString().substring(0, 8);
-        } while (findById(id).isPresent());
+        } while (!ids.add(id));
         return id;
     }
 
@@ -371,6 +385,7 @@ public final class DmnDocument {
         if (found == null) {
             throw new DmnFormatException("The fragment contains no element");
         }
+        ids = null; // the fragment may bring its own ids
         return (Element) dom.importNode(found, true);
     }
 }

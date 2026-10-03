@@ -29,6 +29,7 @@ final class PageSupport {
         model.addAttribute("canUndo", models.canUndo(id));
         model.addAttribute("diagrams", DiagramBuilder.diagrams(reader.document()));
         List<Issue> issues = DmnValidator.validate(reader);
+        model.addAttribute("issues", issues);
         model.addAttribute("errorCount", issues.stream().filter(Issue::isError).count());
         model.addAttribute("warningCount", issues.stream().filter(i -> !i.isError()).count());
         model.addAttribute("typeOptions", typeOptions(reader));

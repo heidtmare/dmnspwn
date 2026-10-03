@@ -3,6 +3,7 @@ package heidtmare.dmnspwn.model;
 import static heidtmare.dmnspwn.xml.DmnDocument.attr;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,9 @@ public final class DmnReader {
     private final DmnDocument doc;
     private final Map<String, Element> nodes = new LinkedHashMap<>();
     private List<ConnectionView> connections;
+    private Map<String, List<ConnectionView>> requiresByTarget;
+    private Map<String, List<ConnectionView>> requiredByNode;
+    private List<ElementView> elements;
 
     public DmnReader(DmnDocument doc) {
         this.doc = doc;
@@ -126,6 +130,29 @@ public final class DmnReader {
         return result;
     }
 
+    /** Connections by the element that requires them, and by the elements they lead from (associations: both ends). */
+    private void indexConnections() {
+        Map<String, List<ConnectionView>> requires = new HashMap<>();
+        Map<String, List<ConnectionView>> requiredBy = new HashMap<>();
+        for (ConnectionView c : connections()) {
+            if (c.kind() == ConnectionKind.ASSOCIATION) {
+                requiredBy.computeIfAbsent(c.sourceId(), k -> new ArrayList<>()).add(c);
+                if (!c.targetId().equals(c.sourceId())) {
+                    requiredBy.computeIfAbsent(c.targetId(), k -> new ArrayList<>()).add(c);
+                }
+            } else {
+                requires.computeIfAbsent(c.targetId(), k -> new ArrayList<>()).add(c);
+                if (c.sourceLocal()) {
+                    requiredBy.computeIfAbsent(c.sourceId(), k -> new ArrayList<>()).add(c);
+                }
+            }
+        }
+        requires.replaceAll((k, v) -> List.copyOf(v));
+        requiredBy.replaceAll((k, v) -> List.copyOf(v));
+        requiresByTarget = requires;
+        requiredByNode = requiredBy;
+    }
+
     private ConnectionView connection(String ref, String id, ConnectionKind kind, Href source, String modelNs,
                                       String targetId) {
         boolean local = source.isLocal(modelNs);
@@ -140,7 +167,10 @@ public final class DmnReader {
     // ---- elements ------------------------------------------------------------------------------
 
     public List<ElementView> elements() {
-        return nodes.values().stream().map(this::element).toList();
+        if (elements == null) {
+            elements = nodes.values().stream().map(this::element).toList();
+        }
+        return elements;
     }
 
     public Optional<ElementView> element(String id) {
@@ -151,12 +181,11 @@ public final class DmnReader {
         ElementKind kind = kindOf(e);
         String id = e.getAttribute("id");
         Element variable = doc.child(e, "variable").orElse(null);
-        List<ConnectionView> requires = connections().stream()
-                .filter(c -> c.targetId().equals(id) && c.kind() != ConnectionKind.ASSOCIATION).toList();
-        List<ConnectionView> requiredBy = connections().stream()
-                .filter(c -> c.sourceId().equals(id) && c.sourceLocal() || c.kind() == ConnectionKind.ASSOCIATION
-                        && (c.sourceId().equals(id) || c.targetId().equals(id)))
-                .toList();
+        if (requiresByTarget == null) {
+            indexConnections();
+        }
+        List<ConnectionView> requires = requiresByTarget.getOrDefault(id, List.of());
+        List<ConnectionView> requiredBy = requiredByNode.getOrDefault(id, List.of());
 
         ExpressionView logic = null;
         String functionKind = null;

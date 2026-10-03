@@ -49,8 +49,8 @@ public class Feel {
     };
 
     private final FeelEngineApi engine = FeelEngineBuilder.create().withValueMapper(VAL_MAPPER).build();
-    private final Map<String, Parsed> expressions = new ConcurrentHashMap<>();
-    private final Map<String, Parsed> unaryTests = new ConcurrentHashMap<>();
+    private final Map<Key, Parsed> expressions = new ConcurrentHashMap<>();
+    private final Map<Key, Parsed> unaryTests = new ConcurrentHashMap<>();
 
     /** Outcome of one evaluation: a value (FEEL {@code null} on failure), a fatal error and/or warnings. */
     public record Result(Val value, String error, List<String> warnings) {
@@ -62,8 +62,12 @@ public class Feel {
     private record Parsed(ParsedExpression expression, String error) {
     }
 
+    /** Cache key: the raw text and the names it is quoted against, so quoting only runs on a miss. */
+    private record Key(QuotedNames names, String text) {
+    }
+
     public Result evaluate(String expression, Scope scope) {
-        Parsed parsed = parse(expressions, quoteNames(expression, scope.quotedNames()), false);
+        Parsed parsed = parse(expressions, expression, scope.quotedNames(), false);
         if (parsed.error() != null) {
             return failure(parsed.error());
         }
@@ -72,7 +76,7 @@ public class Feel {
 
     /** Evaluates unary tests (a decision table input entry) against {@code input}; {@code -} matches anything. */
     public Result test(String unaryTests, Val input, Scope scope) {
-        Parsed parsed = parse(this.unaryTests, quoteNames(unaryTests, scope.quotedNames()), true);
+        Parsed parsed = parse(this.unaryTests, unaryTests, scope.quotedNames(), true);
         if (parsed.error() != null) {
             return failure(parsed.error());
         }
@@ -81,20 +85,22 @@ public class Feel {
 
     /** A syntax error message, or {@code null} when the text parses as a FEEL expression. */
     public String syntaxError(String expression, Collection<String> names) {
-        return parse(expressions, quoteNames(expression, QuotedNames.of(names)), false).error();
+        return parse(expressions, expression, QuotedNames.of(names), false).error();
     }
 
-    private Parsed parse(Map<String, Parsed> cache, String text, boolean tests) {
-        Parsed parsed = cache.get(text);
+    private Parsed parse(Map<Key, Parsed> cache, String text, QuotedNames names, boolean tests) {
+        Key key = new Key(names, text);
+        Parsed parsed = cache.get(key);
         if (parsed == null) {
-            ParseResult result = tests ? engine.parseUnaryTests(text) : engine.parseExpression(text);
+            String quoted = quoteNames(text, names);
+            ParseResult result = tests ? engine.parseUnaryTests(quoted) : engine.parseExpression(quoted);
             parsed = result.isSuccess()
                     ? new Parsed(result.parsedExpression(), null)
                     : new Parsed(null, result.failure().message());
             if (cache.size() >= CACHE_LIMIT) {
                 cache.clear();
             }
-            cache.put(text, parsed);
+            cache.put(key, parsed);
         }
         return parsed;
     }
@@ -117,15 +123,22 @@ public class Feel {
 
     // ---- names with spaces -------------------------------------------------------------------------
 
-    /** Names that are not plain FEEL identifiers, as whitespace-tolerant patterns, longest first. */
+    /**
+     * Names that are not plain FEEL identifiers, as whitespace-tolerant patterns, longest first. Equal when the
+     * names are, so parse results are shared between evaluators of the same model.
+     */
     public static final class QuotedNames {
 
-        static final QuotedNames NONE = new QuotedNames(List.of());
+        static final QuotedNames NONE = new QuotedNames(List.of(), List.of());
 
+        private final List<String> names;
         private final List<Pattern> patterns;
+        private final int hash;
 
-        private QuotedNames(List<Pattern> patterns) {
+        private QuotedNames(List<String> names, List<Pattern> patterns) {
+            this.names = names;
             this.patterns = patterns;
+            this.hash = names.hashCode();
         }
 
         public static QuotedNames of(Collection<String> names) {
@@ -141,11 +154,21 @@ public class Feel {
                 }
                 patterns.add(Pattern.compile(regex.toString()));
             }
-            return new QuotedNames(patterns);
+            return new QuotedNames(special, patterns);
         }
 
         boolean isEmpty() {
             return patterns.isEmpty();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return this == o || o instanceof QuotedNames q && hash == q.hash && names.equals(q.names);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
     }
 
