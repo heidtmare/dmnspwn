@@ -3,6 +3,8 @@ package heidtmare.dmnspwn.store;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
@@ -19,29 +21,50 @@ import heidtmare.dmnspwn.xml.DmnFormatException;
 public class ModelService {
 
     private final ModelRepository repository;
+    /** What the home page shows of each model, kept until the model changes so listing does not parse them all. */
+    private final ConcurrentHashMap<String, Summary> summaries = new ConcurrentHashMap<>();
+
+    private record Summary(ModelRepository.Stamp stamp, String name, String version, String namespace,
+                           int decisions, int elements, String error) {
+    }
 
     public ModelService(ModelRepository repository) {
         this.repository = repository;
     }
 
     public List<ModelSummary> list() {
+        List<String> ids = repository.ids();
+        summaries.keySet().retainAll(ids);
         List<ModelSummary> result = new ArrayList<>();
-        for (String id : repository.ids()) {
-            try {
-                DmnReader reader = new DmnReader(DmnDocument.parse(repository.read(id).orElse("")));
-                var info = reader.info();
-                long decisions = reader.nodeElements().values().stream()
-                        .filter(e -> DmnReader.kindOf(e) == ElementKind.DECISION).count();
-                result.add(new ModelSummary(id, info.name() == null ? id : info.name(), info.version(),
-                        info.namespace(), (int) decisions, reader.nodeElements().size(),
-                        repository.lastModified(id), null, repository.readMeta(id).getProperty("s3.key")));
-            } catch (DmnFormatException e) {
-                result.add(new ModelSummary(id, id, "?", null, 0, 0, repository.lastModified(id), e.getMessage(),
-                        repository.readMeta(id).getProperty("s3.key")));
+        for (String id : ids) {
+            Optional<ModelRepository.Stamp> stamp = repository.stamp(id);
+            if (stamp.isEmpty()) {
+                continue;
             }
+            Summary s = summaries.get(id);
+            if (s == null || !s.stamp().equals(stamp.get())) {
+                s = summarize(id, stamp.get());
+                summaries.put(id, s);
+            }
+            result.add(new ModelSummary(id, s.name(), s.version(), s.namespace(), s.decisions(), s.elements(),
+                    stamp.get().modified(), s.error(), repository.readMeta(id).getProperty("s3.key")));
         }
         result.sort(Comparator.comparing(ModelSummary::updated).reversed());
         return result;
+    }
+
+    /** Parses one model for the listing; {@code stamp} was taken before reading, so it is never newer. */
+    private Summary summarize(String id, ModelRepository.Stamp stamp) {
+        try {
+            DmnReader reader = new DmnReader(DmnDocument.parse(repository.read(id).orElse("")));
+            var info = reader.info();
+            long decisions = reader.nodeElements().values().stream()
+                    .filter(e -> DmnReader.kindOf(e) == ElementKind.DECISION).count();
+            return new Summary(stamp, info.name() == null ? id : info.name(), info.version(), info.namespace(),
+                    (int) decisions, reader.nodeElements().size(), null);
+        } catch (DmnFormatException e) {
+            return new Summary(stamp, id, "?", null, 0, 0, e.getMessage());
+        }
     }
 
     public String xml(String id) {

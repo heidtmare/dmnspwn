@@ -30,6 +30,7 @@ import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.store.ModelService;
+import heidtmare.dmnspwn.xml.DmnDocument;
 
 /** Model overview (DRD), model-level edits, source view and export. */
 @Controller
@@ -186,9 +187,10 @@ public class ModelController {
 
     @GetMapping("/source")
     public String source(@PathVariable String id, Model model) {
-        DmnReader reader = models.reader(id);
+        String xml = models.xml(id);
+        DmnReader reader = new DmnReader(DmnDocument.parse(xml));
         PageSupport.common(model, id, reader, models);
-        model.addAttribute("xml", models.xml(id));
+        model.addAttribute("xml", xml);
         return "source";
     }
 

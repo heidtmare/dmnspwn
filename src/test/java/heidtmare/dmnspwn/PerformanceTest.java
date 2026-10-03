@@ -2,7 +2,15 @@ package heidtmare.dmnspwn;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -10,9 +18,12 @@ import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.util.unit.DataSize;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditor;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
 import heidtmare.dmnspwn.eval.Feel;
@@ -22,10 +33,16 @@ import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.Views.ConnectionView;
 import heidtmare.dmnspwn.model.Views.ElementView;
+import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.ModelService;
+import heidtmare.dmnspwn.store.ModelSummary;
 import heidtmare.dmnspwn.xml.DmnDocument;
 
-/** Guards against the quadratic paths fixed in id generation, element views and FEEL parsing. */
+/** Guards against repeated work: id generation, element views, FEEL parsing and the model listing. */
 class PerformanceTest {
+
+    @TempDir
+    Path dir;
 
     private static final int RULES = 2_000;
 
@@ -95,5 +112,37 @@ class PerformanceTest {
         // Same text, different names: must not reuse the quoted parse from the cache.
         assertThat(Values.format(feel.evaluate("Applicant Age + 1", plain).value())).isNotEqualTo("31");
         assertThat(Values.format(feel.evaluate("Applicant Age + 1", quoted).value())).isEqualTo("31");
+    }
+
+    @Test
+    void listsModelsWithoutReparsingUnchangedOnes() throws Exception {
+        DmnProperties props = new DmnProperties(dir, false, 10, new DmnProperties.S3(false, "", "", "",
+                (URI) null, false, DataSize.ofKilobytes(64), Duration.ofSeconds(5)));
+        ModelRepository repo = spy(new ModelRepository(props));
+        ModelService models = new ModelService(repo);
+        String loan = models.importXml("loan.dmn", TestModels.xml("loan-eligibility"));
+        String dish = models.importXml("dish.dmn", TestModels.xml("dish-selection"));
+        assertThat(models.list()).extracting(ModelSummary::id).containsExactlyInAnyOrder(loan, dish);
+
+        clearInvocations(repo);
+        models.list();
+        verify(repo, never()).read(anyString());
+
+        // An edit through the application is picked up...
+        models.update(loan, ed -> {
+            ed.updateDefinitions("Renamed", "urn:renamed", null);
+            return null;
+        });
+        assertThat(summary(models, loan).name()).isEqualTo("Renamed");
+        // ...and so is a change made to the file outside it.
+        Files.writeString(dir.resolve(dish + ".dmn"), "not xml");
+        assertThat(summary(models, dish).error()).isNotNull();
+
+        models.delete(dish);
+        assertThat(models.list()).extracting(ModelSummary::id).containsExactly(loan);
+    }
+
+    private static ModelSummary summary(ModelService models, String id) {
+        return models.list().stream().filter(m -> m.id().equals(id)).findFirst().orElseThrow();
     }
 }

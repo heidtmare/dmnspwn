@@ -9,6 +9,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -37,6 +38,14 @@ public class ModelRepository {
     private final Path meta;
     private final int historySize;
     private final ConcurrentHashMap<String, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> writes = new ConcurrentHashMap<>();
+
+    /**
+     * Identifies one stored version of a model. It changes on every write through this repository and, via the
+     * file's time and size, on edits made outside the application.
+     */
+    public record Stamp(Instant modified, long size, long writes) {
+    }
 
     public ModelRepository(DmnProperties properties) {
         this.directory = properties.storageDirectory().toAbsolutePath().normalize();
@@ -91,6 +100,22 @@ public class ModelRepository {
         }
     }
 
+    /** The current version of a model, or empty if it does not exist. Read it before the content it describes. */
+    public Optional<Stamp> stamp(String id) {
+        if (!isValid(id)) {
+            return Optional.empty();
+        }
+        long count = writes.getOrDefault(id, 0L);
+        try {
+            BasicFileAttributes a = Files.readAttributes(file(id), BasicFileAttributes.class);
+            return a.isRegularFile()
+                    ? Optional.of(new Stamp(a.lastModifiedTime().toInstant(), a.size(), count))
+                    : Optional.empty();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
     /** Writes a model; when {@code snapshot} is set the previous content is kept for undo. */
     public void write(String id, String xml, boolean snapshot) {
         requireValid(id);
@@ -110,6 +135,7 @@ public class ModelRepository {
             } catch (AtomicMoveNotSupportedException e) {
                 Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
             }
+            writes.merge(id, 1L, Long::sum);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -119,6 +145,7 @@ public class ModelRepository {
         requireValid(id);
         try {
             Files.deleteIfExists(file(id));
+            writes.merge(id, 1L, Long::sum);
             Files.deleteIfExists(meta.resolve(id + ".properties"));
             Path dir = history.resolve(id);
             if (Files.isDirectory(dir)) {
