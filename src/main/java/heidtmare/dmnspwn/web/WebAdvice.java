@@ -67,7 +67,7 @@ public class WebAdvice {
     public String invalid(Exception e, HttpServletRequest request, HttpServletResponse response, Model model) {
         String message = e instanceof MaxUploadSizeExceededException ? "The uploaded file is too large" : e.getMessage();
         if ("POST".equals(request.getMethod())) {
-            if ("fetch".equals(request.getHeader("X-Requested-With"))) {
+            if (FetchRequests.isFetch(request)) {
                 response.setStatus(HttpStatus.UNPROCESSABLE_CONTENT.value());
                 model.addAttribute("status", 422);
                 model.addAttribute("message", message);

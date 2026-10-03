@@ -100,8 +100,10 @@ class WebTest {
         String age = reader.elements().getFirst().id();
         String adult = reader.elements().get(1).id();
 
-        mvc.perform(post(location + "/connections").param("source", age).param("target", adult))
-                .andExpect(flash().attribute("success", "Information requirement added"));
+        mvc.perform(post(location + "/connections").param("source", age).param("target", adult)
+                        .header("X-Requested-With", "fetch"))
+                .andExpect(status().isNoContent());
+        assertThat(models.reader(id).element(adult).orElseThrow().requires()).hasSize(1);
         mvc.perform(post(location + "/connections").param("source", adult).param("target", age)
                         .header("Referer", "http://localhost" + location))
                 .andExpect(status().is3xxRedirection())

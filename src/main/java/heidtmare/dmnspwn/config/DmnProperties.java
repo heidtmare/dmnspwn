@@ -32,7 +32,7 @@ public record DmnProperties(@DefaultValue("./dmn-models") Path storageDirectory,
      */
     public record S3(@DefaultValue("false") boolean enabled,
                      String bucket,
-                     @DefaultValue("") String prefix,
+                     @DefaultValue("dmn/") String prefix,
                      String region,
                      URI endpoint,
                      @DefaultValue("false") boolean pathStyle,
