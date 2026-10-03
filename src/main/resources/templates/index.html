@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Models')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <section class="hero">
+        <div>
+            <h1>Decision models</h1>
+            <p class="muted">View and edit OMG DMN 1.1–1.5 models: decision requirements diagrams, decision tables
+                and boxed expressions. Files are stored as standard <code>.dmn</code> XML.</p>
+        </div>
+        <div class="hero-actions">
+            <form method="post" th:action="@{/models}" class="card form-inline">
+                <label for="new-name">New model</label>
+                <input id="new-name" name="name" placeholder="e.g. Loan Approval" required>
+                <button type="submit" class="primary">Create</button>
+            </form>
+            <form method="post" th:action="@{/models/upload}" enctype="multipart/form-data" class="card form-inline">
+                <label for="upload">Import .dmn</label>
+                <input id="upload" type="file" name="file" accept=".dmn,.xml,application/xml,text/xml" required>
+                <button type="submit">Upload</button>
+            </form>
+            <a th:if="${s3Enabled}" th:href="@{/s3}" class="card s3-link">
+                <strong>Load from S3</strong>
+                <span class="muted">Browse the configured bucket and open a model</span>
+            </a>
+        </div>
+    </section>
+
+    <p class="empty" th:if="${models.isEmpty()}">No models yet. Create one or import a <code>.dmn</code> file.</p>
+
+    <ul class="model-grid" th:unless="${models.isEmpty()}">
+        <li th:each="m : ${models}" class="card model-card" th:classappend="${m.error() != null} ? 'broken'">
+            <a th:href="@{/models/{id}(id=${m.id()})}" class="stretched">
+                <h2 th:text="${m.name()}">Model</h2>
+            </a>
+            <p class="ns" th:if="${m.namespace() != null}" th:text="${m.namespace()}">namespace</p>
+            <p class="err-text" th:if="${m.error() != null}" th:text="${m.error()}">error</p>
+            <div class="meta">
+                <span class="badge" th:text="'DMN ' + ${m.version()}">DMN 1.5</span>
+                <span class="badge s3" th:if="${m.s3Key() != null}" th:title="${m.s3Key()}">S3</span>
+                <span th:text="${m.decisions()} + ' decisions · ' + ${m.elements()} + ' elements'">3 decisions</span>
+                <time th:datetime="${m.updated()}" th:text="${m.updatedText()}">date</time>
+            </div>
+        </li>
+    </ul>
+</main>
+</body>
+</html>

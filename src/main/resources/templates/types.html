@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Data types · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('types')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <datalist th:replace="~{fragments/layout :: types}"></datalist>
+
+    <section class="panel">
+        <h2>Item definitions</h2>
+        <p class="empty" th:if="${types.isEmpty()}">This model defines no custom data types.</p>
+        <div class="table-wrap" th:unless="${types.isEmpty()}">
+            <table class="list">
+                <thead><tr><th>Name</th><th>Type</th><th>Allowed values</th></tr></thead>
+                <tbody>
+                <th:block th:replace="~{types :: rows(${types}, 0)}"></th:block>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" th:if="${editMode}">
+        <h2>Add data type</h2>
+        <form method="post" th:action="@{/models/{id}/types(id=${modelId})}" class="row-form wrap">
+            <label>Name <input name="name" required placeholder="e.g. tRiskCategory"></label>
+            <label>Base type <input name="typeRef" list="type-options" placeholder="string (empty for a structure)"></label>
+            <label class="check"><input type="checkbox" name="collection" value="true"> Collection</label>
+            <button type="submit" class="primary">Add</button>
+        </form>
+    </section>
+</main>
+
+<th:block th:remove="all">
+    <th:block th:fragment="rows(items, depth)">
+        <th:block th:each="t : ${items}">
+            <tr>
+                <td th:style="|padding-left: ${0.75 + depth * 1.5}rem|">
+                    <span th:if="${depth > 0}" class="muted">↳ </span>
+                    <a th:href="@{/models/{id}/types/{p}(id=${modelId},p=${t.path()})}" th:text="${t.name()}">name</a>
+                </td>
+                <td><code th:text="${t.summary()}">string</code></td>
+                <td th:text="${t.allowedValues()}">values</td>
+            </tr>
+            <th:block th:if="${!t.components().isEmpty()}">
+                <th:block th:replace="~{types :: rows(${t.components()}, ${depth + 1})}"></th:block>
+            </th:block>
+        </th:block>
+    </th:block>
+</th:block>
+</body>
+</html>

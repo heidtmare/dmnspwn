@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="Definitions_Loan" name="Loan Eligibility"
+             namespace="https://dmnspwn.dev/dmn/loan-eligibility"
+             expressionLanguage="https://www.omg.org/spec/DMN/20230324/FEEL/"
+             typeLanguage="https://www.omg.org/spec/DMN/20230324/FEEL/"
+             exporter="dmnspwn">
+  <description>Sample model: classifies applicant risk, decides eligibility and computes a loan offer.</description>
+
+  <itemDefinition id="tRiskCategory" name="tRiskCategory">
+    <typeRef>string</typeRef>
+    <allowedValues><text>"Low","Medium","High"</text></allowedValues>
+  </itemDefinition>
+  <itemDefinition id="tEligibility" name="tEligibility">
+    <typeRef>string</typeRef>
+    <allowedValues><text>"Eligible","Referred","Ineligible"</text></allowedValues>
+  </itemDefinition>
+  <itemDefinition id="tLoanOffer" name="tLoanOffer">
+    <itemComponent id="tLoanOffer_amount" name="amount"><typeRef>number</typeRef></itemComponent>
+    <itemComponent id="tLoanOffer_installment" name="installment"><typeRef>number</typeRef></itemComponent>
+  </itemDefinition>
+
+  <inputData id="Applicant_Age" name="Applicant Age">
+    <variable id="Applicant_Age_var" name="Applicant Age" typeRef="number"/>
+  </inputData>
+  <inputData id="Credit_Score" name="Credit Score">
+    <variable id="Credit_Score_var" name="Credit Score" typeRef="number"/>
+  </inputData>
+  <inputData id="Monthly_Income" name="Monthly Income">
+    <variable id="Monthly_Income_var" name="Monthly Income" typeRef="number"/>
+  </inputData>
+  <inputData id="Requested_Amount" name="Requested Amount">
+    <variable id="Requested_Amount_var" name="Requested Amount" typeRef="number"/>
+  </inputData>
+
+  <knowledgeSource id="Lending_Policy" name="Lending Policy" locationURI="https://example.com/policies/lending">
+    <type>Policy document</type>
+  </knowledgeSource>
+
+  <decision id="Risk_Category" name="Risk Category">
+    <question>How risky is lending to this applicant?</question>
+    <allowedAnswers>Low, Medium or High</allowedAnswers>
+    <variable id="Risk_Category_var" name="Risk Category" typeRef="tRiskCategory"/>
+    <informationRequirement id="IR_Age_Risk"><requiredInput href="#Applicant_Age"/></informationRequirement>
+    <informationRequirement id="IR_Score_Risk"><requiredInput href="#Credit_Score"/></informationRequirement>
+    <authorityRequirement id="AR_Policy_Risk"><requiredAuthority href="#Lending_Policy"/></authorityRequirement>
+    <decisionTable id="DT_Risk" hitPolicy="UNIQUE">
+      <input id="DT_Risk_in1" label="Applicant Age">
+        <inputExpression id="DT_Risk_in1_expr" typeRef="number"><text>Applicant Age</text></inputExpression>
+      </input>
+      <input id="DT_Risk_in2" label="Credit Score">
+        <inputExpression id="DT_Risk_in2_expr" typeRef="number"><text>Credit Score</text></inputExpression>
+      </input>
+      <output id="DT_Risk_out" name="Risk Category" typeRef="tRiskCategory">
+        <outputValues><text>"Low","Medium","High"</text></outputValues>
+      </output>
+      <annotation name="Rationale"/>
+      <rule id="DT_Risk_r1">
+        <inputEntry><text>&lt; 18</text></inputEntry><inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"High"</text></outputEntry>
+        <annotationEntry><text>Minors are always high risk</text></annotationEntry>
+      </rule>
+      <rule id="DT_Risk_r2">
+        <inputEntry><text>[18..25)</text></inputEntry><inputEntry><text>&lt; 600</text></inputEntry>
+        <outputEntry><text>"High"</text></outputEntry>
+        <annotationEntry><text/></annotationEntry>
+      </rule>
+      <rule id="DT_Risk_r3">
+        <inputEntry><text>[18..25)</text></inputEntry><inputEntry><text>&gt;= 600</text></inputEntry>
+        <outputEntry><text>"Medium"</text></outputEntry>
+        <annotationEntry><text/></annotationEntry>
+      </rule>
+      <rule id="DT_Risk_r4">
+        <inputEntry><text>&gt;= 25</text></inputEntry><inputEntry><text>&lt; 580</text></inputEntry>
+        <outputEntry><text>"High"</text></outputEntry>
+        <annotationEntry><text/></annotationEntry>
+      </rule>
+      <rule id="DT_Risk_r5">
+        <inputEntry><text>&gt;= 25</text></inputEntry><inputEntry><text>[580..720)</text></inputEntry>
+        <outputEntry><text>"Medium"</text></outputEntry>
+        <annotationEntry><text/></annotationEntry>
+      </rule>
+      <rule id="DT_Risk_r6">
+        <inputEntry><text>&gt;= 25</text></inputEntry><inputEntry><text>&gt;= 720</text></inputEntry>
+        <outputEntry><text>"Low"</text></outputEntry>
+        <annotationEntry><text>Prime borrowers</text></annotationEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="Eligibility" name="Eligibility">
+    <variable id="Eligibility_var" name="Eligibility" typeRef="tEligibility"/>
+    <informationRequirement id="IR_Risk_Elig"><requiredDecision href="#Risk_Category"/></informationRequirement>
+    <informationRequirement id="IR_Income_Elig"><requiredInput href="#Monthly_Income"/></informationRequirement>
+    <decisionTable id="DT_Elig" hitPolicy="FIRST">
+      <input id="DT_Elig_in1" label="Risk Category">
+        <inputExpression id="DT_Elig_in1_expr" typeRef="tRiskCategory"><text>Risk Category</text></inputExpression>
+        <inputValues><text>"Low","Medium","High"</text></inputValues>
+      </input>
+      <input id="DT_Elig_in2" label="Monthly Income">
+        <inputExpression id="DT_Elig_in2_expr" typeRef="number"><text>Monthly Income</text></inputExpression>
+      </input>
+      <output id="DT_Elig_out" name="Eligibility" typeRef="tEligibility"/>
+      <rule id="DT_Elig_r1">
+        <inputEntry><text>"High"</text></inputEntry><inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"Ineligible"</text></outputEntry>
+      </rule>
+      <rule id="DT_Elig_r2">
+        <inputEntry><text>"Medium"</text></inputEntry><inputEntry><text>&lt; 2000</text></inputEntry>
+        <outputEntry><text>"Referred"</text></outputEntry>
+      </rule>
+      <rule id="DT_Elig_r3">
+        <inputEntry><text>-</text></inputEntry><inputEntry><text>&gt;= 1500</text></inputEntry>
+        <outputEntry><text>"Eligible"</text></outputEntry>
+      </rule>
+      <rule id="DT_Elig_r4">
+        <inputEntry><text>-</text></inputEntry><inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"Ineligible"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <businessKnowledgeModel id="Installment_Calculation" name="Installment Calculation">
+    <variable id="Installment_Calculation_var" name="Installment Calculation"/>
+    <encapsulatedLogic id="Installment_Calculation_fn" kind="FEEL">
+      <formalParameter id="p_amount" name="amount" typeRef="number"/>
+      <formalParameter id="p_rate" name="rate" typeRef="number"/>
+      <formalParameter id="p_term" name="term" typeRef="number"/>
+      <literalExpression id="Installment_Calculation_body" typeRef="number">
+        <text>(amount * rate / 12) / (1 - (1 + rate / 12) ** -term)</text>
+      </literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+
+  <decision id="Loan_Offer" name="Loan Offer">
+    <variable id="Loan_Offer_var" name="Loan Offer" typeRef="tLoanOffer"/>
+    <informationRequirement id="IR_Elig_Offer"><requiredDecision href="#Eligibility"/></informationRequirement>
+    <informationRequirement id="IR_Amount_Offer"><requiredInput href="#Requested_Amount"/></informationRequirement>
+    <knowledgeRequirement id="KR_Installment_Offer"><requiredKnowledge href="#Installment_Calculation"/></knowledgeRequirement>
+    <context id="Loan_Offer_ctx" typeRef="tLoanOffer">
+      <contextEntry>
+        <variable id="ctx_installment" name="Monthly Installment" typeRef="number"/>
+        <invocation id="ctx_installment_inv" typeRef="number">
+          <literalExpression id="ctx_installment_fn"><text>Installment Calculation</text></literalExpression>
+          <binding><parameter id="b_amount" name="amount" typeRef="number"/><literalExpression id="b_amount_v"><text>Requested Amount</text></literalExpression></binding>
+          <binding><parameter id="b_rate" name="rate" typeRef="number"/><literalExpression id="b_rate_v"><text>0.05</text></literalExpression></binding>
+          <binding><parameter id="b_term" name="term" typeRef="number"/><literalExpression id="b_term_v"><text>36</text></literalExpression></binding>
+        </invocation>
+      </contextEntry>
+      <contextEntry>
+        <variable id="ctx_offered" name="Offered" typeRef="boolean"/>
+        <literalExpression id="ctx_offered_v"><text>Eligibility = "Eligible"</text></literalExpression>
+      </contextEntry>
+      <contextEntry>
+        <literalExpression id="ctx_result"><text>if Offered then {amount: Requested Amount, installment: Monthly Installment} else null</text></literalExpression>
+      </contextEntry>
+    </context>
+  </decision>
+
+  <decisionService id="Eligibility_Service" name="Eligibility Service">
+    <variable id="Eligibility_Service_var" name="Eligibility Service"/>
+    <outputDecision href="#Eligibility"/>
+    <encapsulatedDecision href="#Risk_Category"/>
+    <inputData href="#Applicant_Age"/>
+    <inputData href="#Credit_Score"/>
+    <inputData href="#Monthly_Income"/>
+  </decisionService>
+
+  <textAnnotation id="Note_Minors">
+    <text>Applicants under 18 are never eligible</text>
+  </textAnnotation>
+  <association id="Assoc_Note_Elig" associationDirection="None">
+    <sourceRef href="#Note_Minors"/>
+    <targetRef href="#Eligibility"/>
+  </association>
+
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DRD_Loan" name="Loan Eligibility">
+      <dmndi:DMNShape id="S_Service" dmnElementRef="Eligibility_Service" isCollapsed="false">
+        <dc:Bounds x="200" y="150" width="260" height="320"/>
+        <dmndi:DMNDecisionServiceDividerLine>
+          <di:waypoint x="200" y="320"/>
+          <di:waypoint x="460" y="320"/>
+        </dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Offer" dmnElementRef="Loan_Offer"><dc:Bounds x="400" y="10" width="180" height="80"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Elig" dmnElementRef="Eligibility"><dc:Bounds x="240" y="200" width="180" height="80"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_BKM" dmnElementRef="Installment_Calculation"><dc:Bounds x="600" y="200" width="180" height="80"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Amount" dmnElementRef="Requested_Amount"><dc:Bounds x="840" y="210" width="180" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Policy" dmnElementRef="Lending_Policy"><dc:Bounds x="-40" y="360" width="180" height="80"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Risk" dmnElementRef="Risk_Category"><dc:Bounds x="240" y="360" width="180" height="80"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Age" dmnElementRef="Applicant_Age"><dc:Bounds x="110" y="530" width="180" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Score" dmnElementRef="Credit_Score"><dc:Bounds x="330" y="530" width="180" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Income" dmnElementRef="Monthly_Income"><dc:Bounds x="550" y="530" width="180" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S_Note" dmnElementRef="Note_Minors"><dc:Bounds x="-40" y="190" width="180" height="60"/></dmndi:DMNShape>
+
+      <dmndi:DMNEdge id="E_Age_Risk" dmnElementRef="IR_Age_Risk"><di:waypoint x="225" y="530"/><di:waypoint x="300" y="440"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Score_Risk" dmnElementRef="IR_Score_Risk"><di:waypoint x="403" y="530"/><di:waypoint x="356" y="440"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Policy_Risk" dmnElementRef="AR_Policy_Risk"><di:waypoint x="140" y="400"/><di:waypoint x="240" y="400"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Risk_Elig" dmnElementRef="IR_Risk_Elig"><di:waypoint x="330" y="360"/><di:waypoint x="330" y="280"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Income_Elig" dmnElementRef="IR_Income_Elig"><di:waypoint x="610" y="530"/><di:waypoint x="390" y="280"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Elig_Offer" dmnElementRef="IR_Elig_Offer"><di:waypoint x="370" y="200"/><di:waypoint x="450" y="90"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_BKM_Offer" dmnElementRef="KR_Installment_Offer"><di:waypoint x="640" y="200"/><di:waypoint x="540" y="90"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Amount_Offer" dmnElementRef="IR_Amount_Offer"><di:waypoint x="860" y="210"/><di:waypoint x="580" y="80"/></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="E_Note_Elig" dmnElementRef="Assoc_Note_Elig"><di:waypoint x="140" y="225"/><di:waypoint x="240" y="235"/></dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${element.displayName()} + ' · expression XML')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('drd')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <div class="element-head">
+        <span class="kind big" th:classappend="${'kind-' + element.kind().slug()}" th:text="${element.kind().displayName()}">Decision</span>
+        <h2 th:text="${element.displayName()}">Element</h2>
+        <span class="muted" th:text="${element.logic() == null ? 'No logic' : element.logicName()}">Context</span>
+        <span class="spacer"></span>
+        <a class="tool" th:if="${element.logic() != null and (element.logic().type() == 'decisionTable' or element.logic().type() == 'literal')}"
+           th:href="@{/models/{id}/elements/{e}/logic(id=${modelId},e=${element.id()})}">Structured editor</a>
+        <a class="tool" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${element.id()})}">Done</a>
+    </div>
+
+    <div class="split">
+        <section class="panel">
+            <h3>Preview</h3>
+            <div class="expr-wrap">
+                <th:block th:replace="~{fragments/expression :: expr(${element.logic()})}"></th:block>
+            </div>
+        </section>
+        <section class="panel">
+            <h3>XML</h3>
+            <pre th:unless="${editMode}" class="code" th:text="${xml}">xml</pre>
+            <form th:if="${editMode}" method="post" class="stack"
+                  th:action="@{/models/{id}/elements/{e}/logic/xml(id=${modelId},e=${element.id()})}">
+                <textarea name="xml" rows="24" class="code" spellcheck="false" th:text="${xml}" required></textarea>
+                <p class="hint">One boxed expression element (e.g. <code>&lt;context&gt;</code>). Namespace prefixes declared
+                    on the model's <code>&lt;definitions&gt;</code> may be used without redeclaring them.</p>
+                <div class="actions"><button type="submit" class="primary">Save expression</button></div>
+            </form>
+        </section>
+    </div>
+</main>
+</body>
+</html>

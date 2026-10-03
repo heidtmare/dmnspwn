@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('S3 · ' + ${bucket})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <h1>Load from S3</h1>
+
+    <section class="panel">
+        <div class="s3-path" th:if="${listing != null}">
+            <span class="muted" th:text="'s3://' + ${bucket} + '/'">s3://bucket/</span>
+            <th:block th:if="${listing.parent() != null}">
+                <a th:href="@{/s3(prefix=${listing.parent()})}">↑ up</a>
+                <span class="muted">·</span>
+            </th:block>
+            <strong th:text="${listing.prefix().isEmpty() ? '(bucket root)' : listing.prefix()}">prefix/</strong>
+        </div>
+
+        <p class="flash err" th:if="${listingError != null}" th:text="${listingError}">error</p>
+
+        <th:block th:if="${listing != null}">
+            <p class="empty" th:if="${listing.folders().isEmpty() and listing.objects().isEmpty()}">This folder is empty.</p>
+            <div class="table-wrap" th:unless="${listing.folders().isEmpty() and listing.objects().isEmpty()}">
+                <table class="list">
+                    <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead>
+                    <tbody>
+                    <tr th:each="f : ${listing.folders()}">
+                        <td><a th:href="@{/s3(prefix=${f.prefix()})}" th:text="${f.name() + '/'}">folder/</a></td>
+                        <td></td><td></td><td></td>
+                    </tr>
+                    <tr th:each="o : ${listing.objects()}" th:with="dmn=${o.key().toLowerCase().endsWith('.dmn') or o.key().toLowerCase().endsWith('.xml')}">
+                        <td>
+                            <span th:text="${o.name()}">model.dmn</span>
+                            <a th:if="${linked.containsKey(o.key())}" class="badge s3"
+                               th:href="@{/models/{id}(id=${linked.get(o.key())})}" title="Already loaded">open local copy</a>
+                        </td>
+                        <td th:text="${o.sizeText()}">1 KB</td>
+                        <td th:text="${o.modifiedText()}">date</td>
+                        <td class="row-actions">
+                            <form th:if="${dmn}" method="post" th:action="@{/s3/load}" class="inline">
+                                <input type="hidden" name="key" th:value="${o.key()}">
+                                <button type="submit" class="small" th:text="${linked.containsKey(o.key())} ? 'Reload' : 'Load'">Load</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p th:if="${listing.nextToken() != null}">
+                <a th:href="@{/s3(prefix=${listing.prefix()},token=${listing.nextToken()})}">Next page →</a>
+            </p>
+        </th:block>
+    </section>
+
+    <section class="panel">
+        <h2>Load by key</h2>
+        <form method="post" th:action="@{/s3/load}" class="row-form">
+            <label>Object key <input name="key" required th:placeholder="${root + 'model.dmn'}"></label>
+            <button type="submit" class="primary">Load</button>
+        </form>
+        <p class="hint">Reloading a model that is already linked replaces the local copy, unless it has unpublished changes.</p>
+    </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Source · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('source')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="panel">
+        <pre th:unless="${editMode}" class="code source" th:text="${xml}">xml</pre>
+        <form th:if="${editMode}" method="post" th:action="@{/models/{id}/source(id=${modelId})}" class="stack">
+            <textarea name="xml" class="code source" rows="36" spellcheck="false" th:text="${xml}" required></textarea>
+            <div class="actions">
+                <button type="submit" class="primary">Save source</button>
+                <span class="hint">The document must be well-formed DMN; the previous version is kept for Undo.</span>
+            </div>
+        </form>
+    </section>
+</main>
+</body>
+</html>

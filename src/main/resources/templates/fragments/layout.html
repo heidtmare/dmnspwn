@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:fragment="head(title)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' · dmnspwn'">dmnspwn</title>
+    <link rel="icon" type="image/svg+xml" th:href="@{/favicon.svg}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header th:fragment="topbar" class="topbar">
+    <a class="brand" th:href="@{/}">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 5h18v14H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M9 10v9" stroke="currentColor" stroke-width="2"/></svg>
+        <span>dmn<strong>spwn</strong></span>
+    </a>
+    <nav class="crumbs" aria-label="Breadcrumb" th:if="${info != null}">
+        <a th:href="@{/}">Models</a>
+        <span aria-hidden="true">/</span>
+        <a th:href="@{/models/{id}(id=${modelId})}" th:text="${info.name() ?: modelId}">model</a>
+        <th:block th:if="${element != null}">
+            <span aria-hidden="true">/</span>
+            <a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${element.id()})}" th:text="${element.displayName()}">element</a>
+        </th:block>
+    </nav>
+    <form class="mode" method="post" th:action="@{/mode}">
+        <input type="hidden" name="back" th:value="${currentUri}">
+        <input type="hidden" name="edit" th:value="${editMode != true}">
+        <span class="mode-label">Mode</span>
+        <button type="submit" class="switch" th:classappend="${editMode == true} ? 'on'" th:attr="aria-pressed=${editMode == true}"
+                th:title="${editMode == true} ? 'Switch to read-only viewer' : 'Switch to editor'">
+            <span class="knob"></span><span th:text="${editMode == true} ? 'Edit' : 'View'">View</span>
+        </button>
+    </form>
+</header>
+
+<div th:fragment="flash" class="flash-area">
+    <div class="flash ok" role="status" th:if="${success != null}" th:text="${success}">Saved</div>
+    <div class="flash err" role="alert" th:if="${error != null}" th:text="${error}">Error</div>
+</div>
+
+<div th:fragment="modelhead(active)" class="model-head">
+    <div class="title-row">
+        <h1 th:text="${info.name() ?: modelId}">Model</h1>
+        <span class="badge" th:text="'DMN ' + ${info.version()}">DMN 1.5</span>
+        <span class="ns" th:if="${info.namespace() != null}" th:text="${info.namespace()}">ns</span>
+    </div>
+    <nav class="tabs" aria-label="Model sections">
+        <a th:href="@{/models/{id}(id=${modelId})}" th:classappend="${active == 'drd'} ? 'active'">Diagram</a>
+        <a th:href="@{/models/{id}/types(id=${modelId})}" th:classappend="${active == 'types'} ? 'active'">Data types</a>
+        <a th:href="@{/models/{id}/evaluate(id=${modelId})}" th:classappend="${active == 'evaluate'} ? 'active'">Evaluate</a>
+        <a th:href="@{/models/{id}/source(id=${modelId})}" th:classappend="${active == 'source'} ? 'active'">XML source</a>
+        <a th:href="@{/models/{id}/validation(id=${modelId})}" th:classappend="${active == 'validation'} ? 'active'">
+            Validation
+            <span class="count err" th:if="${errorCount > 0}" th:text="${errorCount}">1</span>
+            <span class="count warn" th:if="${warningCount > 0}" th:text="${warningCount}">1</span>
+        </a>
+        <a th:if="${s3Enabled}" th:href="@{/models/{id}/s3(id=${modelId})}" th:classappend="${active == 's3'} ? 'active'">S3</a>
+        <span class="spacer"></span>
+        <a class="tool" th:href="@{/models/{id}/download(id=${modelId})}">Download .dmn</a>
+        <form th:if="${editMode}" method="post" th:action="@{/models/{id}/undo(id=${modelId})}" class="inline">
+            <input type="hidden" name="back" th:value="${currentUri}">
+            <button class="tool" type="submit" th:disabled="${!canUndo}" title="Restore the previous version">Undo</button>
+        </form>
+    </nav>
+</div>
+
+<datalist th:fragment="types" id="type-options">
+    <option th:each="t : ${typeOptions}" th:value="${t}"></option>
+</datalist>
+
+</body>
+</html>

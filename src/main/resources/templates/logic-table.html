@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${element.displayName()} + ' · decision table')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('drd')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <datalist th:replace="~{fragments/layout :: types}"></datalist>
+
+    <div class="element-head">
+        <span class="kind big" th:classappend="${'kind-' + element.kind().slug()}" th:text="${element.kind().displayName()}">Decision</span>
+        <h2 th:text="${element.displayName()}">Element</h2>
+        <span class="muted">Decision table</span>
+        <span class="spacer"></span>
+        <a class="tool" th:href="@{/models/{id}/elements/{e}/logic(id=${modelId},e=${element.id()},raw=true)}">Edit as XML</a>
+        <a class="tool" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${element.id()})}">Done</a>
+    </div>
+
+    <section class="panel" th:unless="${editMode}">
+        <p class="note">Switch to <strong>Edit</strong> mode to change this table.</p>
+        <div class="expr-wrap"><table th:replace="~{fragments/expression :: decisionTable(${table})}"></table></div>
+    </section>
+
+    <form th:if="${editMode}" method="post" class="panel dt-editor"
+          th:action="@{/models/{id}/elements/{e}/logic/decision-table(id=${modelId},e=${element.id()})}">
+        <!--/* First submit button: pressing Enter in any field saves instead of triggering a row action. */-->
+        <button type="submit" name="action" value="save" class="default-submit" tabindex="-1" aria-hidden="true">Save</button>
+
+        <div class="toolbar">
+            <label class="inline-label">Hit policy
+                <select name="hitPolicy">
+                    <option th:each="h : ${hitPolicies}" th:value="${h}" th:text="${h}"
+                            th:selected="${h == (table.hitPolicy() ?: 'UNIQUE')}">UNIQUE</option>
+                </select>
+            </label>
+            <label class="inline-label">Aggregation
+                <select name="aggregation">
+                    <option value="">(none / list)</option>
+                    <option th:each="a : ${aggregations}" th:value="${a}" th:text="${a}" th:selected="${a == table.aggregation()}">SUM</option>
+                </select>
+            </label>
+            <label class="inline-label" th:if="${table.outputs().size() > 1}">Output label
+                <input name="outputLabel" th:value="${table.outputLabel()}">
+            </label>
+            <input th:if="${table.outputs().size() <= 1}" type="hidden" name="outputLabel" th:value="${table.outputLabel()}">
+            <span class="spacer"></span>
+            <button type="submit" name="action" value="addInput">+ Input</button>
+            <button type="submit" name="action" value="addOutput">+ Output</button>
+            <button type="submit" name="action" value="addAnnotation">+ Annotation</button>
+            <button type="submit" name="action" value="addRule">+ Rule</button>
+            <button type="submit" name="action" value="save" class="primary">Save</button>
+        </div>
+
+        <div class="table-wrap">
+            <table class="dt dt-edit">
+                <thead>
+                <tr>
+                    <th class="dt-hp" th:text="${table.hitPolicyCode()}">U</th>
+                    <th th:each="ic, s : ${table.inputs()}" class="dt-in">
+                        <div class="col-head">
+                            <span class="col-tag">Input</span>
+                            <button type="submit" name="action" th:value="|addInput:${s.index}|" class="icon" title="Insert input after">+</button>
+                            <button type="submit" name="action" th:value="|deleteInput:${s.index}|" class="icon danger" title="Delete input">✕</button>
+                        </div>
+                        <input th:name="|inputs[${s.index}].expression|" th:value="${ic.expression()}" placeholder="input expression" class="cell strong" aria-label="Input expression">
+                        <input th:name="|inputs[${s.index}].label|" th:value="${ic.label()}" placeholder="label (optional)" class="cell" aria-label="Input label">
+                        <input th:name="|inputs[${s.index}].typeRef|" th:value="${ic.typeRef()}" placeholder="type" list="type-options" class="cell" aria-label="Input type">
+                        <input th:name="|inputs[${s.index}].inputValues|" th:value="${ic.inputValues()}" placeholder="allowed values" class="cell" aria-label="Input values">
+                    </th>
+                    <th th:each="oc, s : ${table.outputs()}" class="dt-out" th:classappend="${s.first} ? 'dt-sep'">
+                        <div class="col-head">
+                            <span class="col-tag">Output</span>
+                            <button type="submit" name="action" th:value="|deleteOutput:${s.index}|" class="icon danger" title="Delete output" th:disabled="${table.outputs().size() == 1}">✕</button>
+                        </div>
+                        <input th:name="|outputs[${s.index}].name|" th:value="${oc.name()}" placeholder="name" class="cell strong" aria-label="Output name">
+                        <input th:name="|outputs[${s.index}].label|" th:value="${oc.label()}" placeholder="label (optional)" class="cell" aria-label="Output label">
+                        <input th:name="|outputs[${s.index}].typeRef|" th:value="${oc.typeRef()}" placeholder="type" list="type-options" class="cell" aria-label="Output type">
+                        <input th:name="|outputs[${s.index}].outputValues|" th:value="${oc.outputValues()}" placeholder="allowed values" class="cell" aria-label="Output values">
+                        <input th:name="|outputs[${s.index}].defaultOutput|" th:value="${oc.defaultOutput()}" placeholder="default output" class="cell" aria-label="Default output">
+                    </th>
+                    <th th:each="a, s : ${table.annotations()}" class="dt-ann" th:classappend="${s.first} ? 'dt-sep'">
+                        <div class="col-head">
+                            <span class="col-tag">Annotation</span>
+                            <button type="submit" name="action" th:value="|deleteAnnotation:${s.index}|" class="icon danger" title="Delete annotation column">✕</button>
+                        </div>
+                        <input th:name="|annotations[${s.index}]|" th:value="${a}" class="cell strong" aria-label="Annotation name">
+                    </th>
+                    <th class="dt-actions"></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r, rs : ${table.rules()}">
+                    <td class="dt-idx" th:text="${rs.count}">1</td>
+                    <td th:each="v, s : ${r.inputs()}">
+                        <input th:name="|rules[${rs.index}].inputs[${s.index}]|" th:value="${v}" class="cell feel" th:attr="aria-label=|Rule ${rs.count} input ${s.count}|">
+                    </td>
+                    <td th:each="v, s : ${r.outputs()}" th:classappend="${s.first} ? 'dt-sep'">
+                        <input th:name="|rules[${rs.index}].outputs[${s.index}]|" th:value="${v}" class="cell feel" th:attr="aria-label=|Rule ${rs.count} output ${s.count}|">
+                    </td>
+                    <td th:each="v, s : ${r.annotations()}" th:classappend="${s.first} ? 'dt-sep'">
+                        <input th:name="|rules[${rs.index}].annotations[${s.index}]|" th:value="${v}" class="cell" th:attr="aria-label=|Rule ${rs.count} annotation ${s.count}|">
+                    </td>
+                    <td class="row-actions">
+                        <button type="submit" name="action" th:value="|moveRuleUp:${rs.index}|" class="icon" title="Move up" th:disabled="${rs.first}">↑</button>
+                        <button type="submit" name="action" th:value="|moveRuleDown:${rs.index}|" class="icon" title="Move down" th:disabled="${rs.last}">↓</button>
+                        <button type="submit" name="action" th:value="|duplicateRule:${rs.index}|" class="icon" title="Duplicate">⧉</button>
+                        <button type="submit" name="action" th:value="|addRule:${rs.index}|" class="icon" title="Insert rule below">+</button>
+                        <button type="submit" name="action" th:value="|deleteRule:${rs.index}|" class="icon danger" title="Delete rule">✕</button>
+                    </td>
+                </tr>
+                <tr th:if="${table.rules().isEmpty()}">
+                    <td class="dt-empty" th:attr="colspan=${2 + table.inputs().size() + table.outputs().size() + table.annotations().size()}">No rules yet — add one.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="hint">Input entries are FEEL unary tests (<code>&lt; 18</code>, <code>[18..65)</code>, <code>"A","B"</code>,
+            <code>-</code> for any). Output entries are FEEL expressions. Structural buttons save the table first.</p>
+    </form>
+</main>
+</body>
+</html>

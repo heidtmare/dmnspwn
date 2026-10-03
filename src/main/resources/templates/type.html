@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${type.name()} + ' · data type')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('types')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <datalist th:replace="~{fragments/layout :: types}"></datalist>
+
+    <div class="element-head">
+        <span class="kind big kind-type" th:text="${path.contains('.')} ? 'Component' : 'Item definition'">Item definition</span>
+        <h2 th:text="${type.name()}">tType</h2>
+        <code class="muted" th:text="${type.summary()}">string</code>
+        <span class="spacer"></span>
+        <a class="tool" th:if="${path.contains('.')}" th:href="@{/models/{id}/types/{p}(id=${modelId},p=${path.substring(0, path.lastIndexOf('.'))})}">Parent type</a>
+        <a class="tool" th:href="@{/models/{id}/types(id=${modelId})}">All types</a>
+    </div>
+
+    <section class="panel" th:unless="${editMode}">
+        <dl class="props">
+            <dt>Name</dt><dd th:text="${type.name()}">n</dd>
+            <th:block th:if="${type.label() != null}"><dt>Label</dt><dd th:text="${type.label()}">l</dd></th:block>
+            <dt>Base type</dt><dd><code th:text="${type.typeRef() ?: (type.components().isEmpty() ? 'Any' : 'structure')}">t</code></dd>
+            <dt>Collection</dt><dd th:text="${type.collection()} ? 'yes' : 'no'">no</dd>
+            <th:block th:if="${type.allowedValues() != null}"><dt>Allowed values</dt><dd><code th:text="${type.allowedValues()}">v</code></dd></th:block>
+            <th:block th:if="${type.typeConstraint() != null}"><dt>Type constraint</dt><dd><code th:text="${type.typeConstraint()}">v</code></dd></th:block>
+        </dl>
+        <th:block th:unless="${type.components().isEmpty()}">
+            <h3>Components</h3>
+            <table class="list">
+                <thead><tr><th>Name</th><th>Type</th><th>Allowed values</th></tr></thead>
+                <tbody>
+                <tr th:each="c : ${type.components()}">
+                    <td><a th:href="@{/models/{id}/types/{p}(id=${modelId},p=${c.path()})}" th:text="${c.name()}">c</a></td>
+                    <td><code th:text="${c.summary()}">string</code></td>
+                    <td th:text="${c.allowedValues()}">v</td>
+                </tr>
+                </tbody>
+            </table>
+        </th:block>
+    </section>
+
+    <form th:if="${editMode}" method="post" class="panel" th:action="@{/models/{id}/types/{p}(id=${modelId},p=${path})}">
+        <button type="submit" name="action" value="save" class="default-submit" tabindex="-1" aria-hidden="true">Save</button>
+        <div class="grid-form">
+            <label>Name <input name="name" th:value="${type.name()}" required></label>
+            <label>Label <input name="label" th:value="${type.label()}"></label>
+            <label>Base type <input name="typeRef" th:value="${type.typeRef()}" list="type-options"
+                                    th:disabled="${!type.components().isEmpty()}" th:placeholder="${type.components().isEmpty()} ? 'e.g. string' : 'structure'"></label>
+            <label>Allowed values <input name="allowedValues" th:value="${type.allowedValues()}" placeholder='e.g. "Low","Medium","High"'></label>
+            <label class="check"><input type="checkbox" name="collection" value="true" th:checked="${type.collection()}"> Collection</label>
+        </div>
+        <h3>Components</h3>
+        <div class="table-wrap">
+            <table class="list compact">
+                <thead><tr><th>Name</th><th>Type</th><th>Allowed values</th><th>Collection</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="c, s : ${type.components()}">
+                    <td><input th:name="|components[${s.index}].name|" th:value="${c.name()}" required></td>
+                    <td th:if="${c.components().isEmpty()}"><input th:name="|components[${s.index}].typeRef|" th:value="${c.typeRef()}" list="type-options"></td>
+                    <td th:unless="${c.components().isEmpty()}"><a th:href="@{/models/{id}/types/{p}(id=${modelId},p=${c.path()})}">structure…</a></td>
+                    <td><input th:name="|components[${s.index}].allowedValues|" th:value="${c.allowedValues()}"></td>
+                    <td><input type="checkbox" th:name="|components[${s.index}].collection|" value="true" th:checked="${c.collection()}" aria-label="Collection"></td>
+                    <td class="row-actions">
+                        <a class="icon" th:href="@{/models/{id}/types/{p}(id=${modelId},p=${c.path()})}" title="Open component">→</a>
+                        <button type="submit" name="action" th:value="|moveComponentUp:${s.index}|" class="icon" title="Move up" th:disabled="${s.first}">↑</button>
+                        <button type="submit" name="action" th:value="|deleteComponent:${s.index}|" class="icon danger" title="Remove">✕</button>
+                    </td>
+                </tr>
+                <tr th:if="${type.components().isEmpty()}"><td colspan="5" class="dt-empty">No components — this is a simple type.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="actions">
+            <button type="submit" name="action" value="addComponent">Add component</button>
+            <button type="submit" name="action" value="save" class="primary">Save</button>
+            <span class="spacer"></span>
+            <button type="submit" class="danger" th:formaction="@{/models/{id}/types/{p}/delete(id=${modelId},p=${path})}"
+                    formnovalidate>Delete type</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

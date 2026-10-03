@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Evaluate · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('evaluate')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <div class="split eval-layout">
+        <section class="panel">
+            <h3>Inputs</h3>
+            <form method="post" th:action="@{/models/{id}/evaluate(id=${modelId})}" class="stack" id="eval-form">
+                <p class="empty" th:if="${fields.isEmpty()}">This model has no input data.</p>
+                <label th:each="f : ${fields}">
+                    <span class="eval-label"><span th:text="${f.name()}">Input</span>
+                        <code class="type" th:if="${f.typeRef() != null}" th:text="${f.typeRef()}">number</code></span>
+                    <input class="code" th:name="${'in.' + f.id()}" th:value="${saved.inputs()[f.id()]}"
+                           th:placeholder="${f.placeholder()}" th:attr="list=${f.suggestions().isEmpty()} ? null : ${'values-' + f.id()}"
+                           autocomplete="off" spellcheck="false">
+                    <datalist th:unless="${f.suggestions().isEmpty()}" th:id="${'values-' + f.id()}">
+                        <option th:each="v : ${f.suggestions()}" th:value="${v}"></option>
+                    </datalist>
+                </label>
+                <p class="hint" th:unless="${fields.isEmpty()}">Values are FEEL expressions: <code>42</code>, <code>"text"</code>,
+                    <code>true</code>, <code>date("2024-01-31")</code>, <code>[1, 2]</code>, <code>{a: 1}</code>. Empty means <code>null</code>.</p>
+
+                <label>Decision
+                    <select name="decision">
+                        <option value="" th:selected="${saved.decision() == null or saved.decision().isBlank()}">All decisions</option>
+                        <option th:each="d : ${decisions}" th:value="${d.id()}" th:text="${d.displayName()}"
+                                th:selected="${d.id() == saved.decision()}">decision</option>
+                    </select>
+                </label>
+                <label>FEEL expression <small>(optional)</small>
+                    <textarea name="expression" rows="3" class="code" spellcheck="false"
+                              placeholder="e.g. Loan Offer.installment * 12" th:text="${saved.expression()}"></textarea>
+                </label>
+                <p class="hint">The expression can use every input, decision, business knowledge model and decision service of the model by name.
+                    With an expression and <em>All decisions</em>, only the decisions it needs are evaluated.</p>
+                <div class="actions"><button type="submit" class="primary">Evaluate</button></div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h3>Results</h3>
+            <p class="empty" th:if="${result == null}">Enter input values and press <em>Evaluate</em>. Nothing is saved to the model.</p>
+            <th:block th:if="${result != null}">
+                <ul class="messages" th:if="${result.hasInputErrors()}">
+                    <li th:each="i : ${result.inputs()}" th:if="${i.error() != null}" class="msg-error">
+                        <strong th:text="${i.name()}">input</strong>: <span th:text="${i.error()}">error</span></li>
+                </ul>
+
+                <div th:if="${result.expression() != null}" class="eval-expression">
+                    <h4>Expression</h4>
+                    <pre class="feel muted" th:text="${result.expression().text()}">expr</pre>
+                    <div class="eval-value" th:classappend="${result.expression().hasErrors()} ? 'has-error'">
+                        <pre th:text="${result.expression().formatted()}">value</pre>
+                        <small class="muted" th:text="${result.expression().valueType()}">type</small>
+                    </div>
+                    <ul class="messages" th:unless="${result.expression().messages().isEmpty()}">
+                        <li th:each="m : ${result.expression().messages()}" th:classappend="${m.error()} ? 'msg-error' : 'msg-warning'" th:text="${m.text()}">msg</li>
+                    </ul>
+                </div>
+
+                <p class="empty" th:if="${result.decisions().isEmpty() and result.expression() == null}">No decisions to evaluate.</p>
+                <div class="table-wrap" th:unless="${result.decisions().isEmpty()}">
+                    <table class="list eval-results">
+                        <thead><tr><th>Decision</th><th>Result</th></tr></thead>
+                        <tbody>
+                        <tr th:each="d : ${result.decisions()}" th:classappend="${d.requested()} ? '' : 'dependency'">
+                            <td>
+                                <a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${d.id()})}" th:text="${d.name()}">decision</a>
+                                <div><small class="muted" th:unless="${d.requested()}">dependency</small></div>
+                            </td>
+                            <td>
+                                <div class="eval-value" th:classappend="${d.hasErrors()} ? 'has-error'">
+                                    <pre th:text="${d.formatted()}">value</pre>
+                                    <small class="muted" th:text="${d.valueType()}">type</small>
+                                </div>
+                                <ul class="messages" th:unless="${d.messages().isEmpty()}">
+                                    <li th:each="m : ${d.messages()}" th:classappend="${m.error()} ? 'msg-error' : 'msg-warning'" th:text="${m.text()}">msg</li>
+                                </ul>
+                                <details th:if="${d.table()}" th:with="hits=${d.matchedRules()}">
+                                    <summary th:text="${hits.isEmpty() ? 'No rule matched' : (hits.size() == 1 ? 'Matched rule ' : 'Matched rules ') + #strings.listJoin(hits, ', ')}">Matched rules</summary>
+                                    <div class="expr-wrap">
+                                        <table th:replace="~{fragments/expression :: decisionTable(${logic[d.id()]})}"></table>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </th:block>
+        </section>
+    </div>
+</main>
+</body>
+</html>
