@@ -10,6 +10,7 @@ import java.util.Set;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import heidtmare.dmnspwn.model.BuiltInTypes;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
@@ -22,11 +23,6 @@ import heidtmare.dmnspwn.xml.DmnDocument;
 
 /** Structural checks derived from the DMN specification's well-formedness rules. */
 public final class DmnValidator {
-
-    private static final Set<String> BUILT_IN_TYPES = Set.of(
-            "number", "string", "boolean", "days and time duration", "years and months duration", "date", "time",
-            "date and time", "Any", "context", "list", "function", "range", "dayTimeDuration",
-            "yearMonthDuration", "dateTime", "null");
 
     private DmnValidator() {
     }
@@ -49,7 +45,7 @@ public final class DmnValidator {
             }
         });
 
-        Set<String> types = new HashSet<>(BUILT_IN_TYPES);
+        Set<String> types = new HashSet<>();
         collectTypeNames(reader.itemDefinitions(), types);
         Map<String, ElementView> elements = new HashMap<>();
         Set<String> names = new HashSet<>();
@@ -81,9 +77,11 @@ public final class DmnValidator {
         }
 
         for (ConnectionView c : reader.connections()) {
-            if (c.sourceLocal() && !elements.containsKey(c.sourceId()) || !elements.containsKey(c.targetId())) {
-                issues.add(new Issue(Severity.ERROR, c.targetId(), c.targetName(),
-                        c.kind().displayName() + " references missing element '" + c.sourceId() + "'"));
+            boolean sourceMissing = c.sourceLocal() && !elements.containsKey(c.sourceId());
+            boolean targetMissing = !elements.containsKey(c.targetId());
+            if (sourceMissing || targetMissing) {
+                issues.add(new Issue(Severity.ERROR, c.targetId(), c.targetName(), c.kind().displayName()
+                        + " references missing element '" + (targetMissing ? c.targetId() : c.sourceId()) + "'"));
                 continue;
             }
             if (c.sourceKind() != null && c.targetKind() != null
@@ -180,7 +178,7 @@ public final class DmnValidator {
 
     private static boolean isKnownType(String typeRef, Set<String> types) {
         String t = typeRef.contains(":") ? typeRef.substring(typeRef.indexOf(':') + 1) : typeRef;
-        return types.contains(t) || types.contains(typeRef) || typeRef.contains(".");
+        return BuiltInTypes.isBuiltIn(t) || types.contains(t) || types.contains(typeRef) || typeRef.contains(".");
     }
 
     private static Issue issue(Severity severity, ElementView e, String message) {

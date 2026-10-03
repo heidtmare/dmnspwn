@@ -20,6 +20,7 @@ import org.camunda.feel.syntaxtree.ValFunction;
 import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
 import heidtmare.dmnspwn.eval.Evaluation.ExpressionResult;
 import heidtmare.dmnspwn.eval.Evaluation.InputResult;
+import heidtmare.dmnspwn.model.BuiltInTypes;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
@@ -348,15 +349,15 @@ public final class ModelEvaluator {
             }
             return sb.append('}').toString();
         }
-        return switch (base) {
+        return switch (BuiltInTypes.canonical(base)) {
             case "number" -> "e.g. 42";
             case "string" -> "e.g. \"text\"";
             case "boolean" -> "true or false";
             case "date" -> "e.g. date(\"2024-01-31\")";
             case "time" -> "e.g. time(\"10:30:00\")";
-            case "date and time", "dateTime" -> "e.g. date and time(\"2024-01-31T10:30:00\")";
-            case "days and time duration", "dayTimeDuration" -> "e.g. duration(\"P1DT2H\")";
-            case "years and months duration", "yearMonthDuration" -> "e.g. duration(\"P1Y6M\")";
+            case "date and time" -> "e.g. date and time(\"2024-01-31T10:30:00\")";
+            case "days and time duration" -> "e.g. duration(\"P1DT2H\")";
+            case "years and months duration" -> "e.g. duration(\"P1Y6M\")";
             case "list" -> "e.g. [1, 2, 3]";
             case "context" -> "e.g. {name: \"value\"}";
             default -> "FEEL expression";

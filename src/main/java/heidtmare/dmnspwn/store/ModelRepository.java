@@ -32,6 +32,8 @@ public class ModelRepository {
 
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_-]{0,80}");
     private static final String EXT = ".dmn";
+    /** Snapshot file names: {@code <millis>-<nanos>.dmn}. Anything else in a history directory is ignored. */
+    private static final Pattern SNAPSHOT = Pattern.compile("\\d+-\\d+\\.dmn");
 
     private final Path directory;
     private final Path history;
@@ -92,14 +94,6 @@ public class ModelRepository {
         }
     }
 
-    public Instant lastModified(String id) {
-        try {
-            return Files.getLastModifiedTime(file(id)).toInstant();
-        } catch (IOException e) {
-            return Instant.EPOCH;
-        }
-    }
-
     /** The current version of a model, or empty if it does not exist. Read it before the content it describes. */
     public Optional<Stamp> stamp(String id) {
         if (!isValid(id)) {
@@ -118,7 +112,7 @@ public class ModelRepository {
 
     /** Writes a model; when {@code snapshot} is set the previous content is kept for undo. */
     public void write(String id, String xml, boolean snapshot) {
-        requireValid(id);
+        requireValidId(id);
         Path target = file(id);
         try {
             if (snapshot && historySize > 0 && Files.exists(target)) {
@@ -142,7 +136,7 @@ public class ModelRepository {
     }
 
     public void delete(String id) {
-        requireValid(id);
+        requireValidId(id);
         try {
             Files.deleteIfExists(file(id));
             writes.merge(id, 1L, Long::sum);
@@ -233,10 +227,6 @@ public class ModelRepository {
         return id != null && ID.matcher(id).matches();
     }
 
-    private void requireValid(String id) {
-        requireValidId(id);
-    }
-
     private static String requireValidId(String id) {
         if (!isValid(id)) {
             throw new ModelNotFoundException(String.valueOf(id));
@@ -256,12 +246,19 @@ public class ModelRepository {
         if (!Files.isDirectory(dir)) {
             return List.of();
         }
-        try (Stream<Path> files = Files.list(dir)) {
-            return files.filter(p -> p.toString().endsWith(EXT))
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString(), ModelRepository::compareSnapshots))
-                    .toList();
+        try {
+            return snapshotsIn(dir);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /** The snapshot files in a history directory, oldest first. */
+    private static List<Path> snapshotsIn(Path dir) throws IOException {
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.filter(p -> SNAPSHOT.matcher(p.getFileName().toString()).matches())
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString(), ModelRepository::compareSnapshots))
+                    .toList();
         }
     }
 
@@ -278,11 +275,7 @@ public class ModelRepository {
     }
 
     private void prune(Path dir) throws IOException {
-        List<Path> all;
-        try (Stream<Path> files = Files.list(dir)) {
-            all = files.sorted(Comparator.comparing(p -> p.getFileName().toString(), ModelRepository::compareSnapshots))
-                    .toList();
-        }
+        List<Path> all = snapshotsIn(dir);
         for (int i = 0; i < all.size() - historySize; i++) {
             Files.deleteIfExists(all.get(i));
         }

@@ -8,6 +8,7 @@ import java.util.Set;
 import org.springframework.ui.Model;
 
 import heidtmare.dmnspwn.diagram.DiagramBuilder;
+import heidtmare.dmnspwn.model.BuiltInTypes;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
 import heidtmare.dmnspwn.store.ModelService;
@@ -16,9 +17,6 @@ import heidtmare.dmnspwn.validate.Issue;
 
 /** Model attributes shared by every page that belongs to one model. */
 final class PageSupport {
-
-    static final List<String> BUILT_IN_TYPES = List.of("string", "number", "boolean", "date", "time",
-            "date and time", "days and time duration", "years and months duration", "Any", "context", "list");
 
     private PageSupport() {
     }
@@ -40,7 +38,7 @@ final class PageSupport {
     static List<String> typeOptions(DmnReader reader) {
         Set<String> options = new LinkedHashSet<>();
         collect(reader.itemDefinitions(), options);
-        options.addAll(BUILT_IN_TYPES);
+        options.addAll(BuiltInTypes.OFFERED);
         return new ArrayList<>(options);
     }
 

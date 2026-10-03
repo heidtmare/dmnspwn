@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.springframework.stereotype.Service;
 
@@ -81,13 +82,23 @@ public class ModelService {
 
     /** Applies an edit atomically: load, mutate, store (keeping the previous version for undo). */
     public <T> T update(String id, Function<DmnEditor, T> edit) {
-        ReentrantLock lock = repository.lock(id);
-        lock.lock();
-        try {
+        return withLock(id, () -> {
             DmnDocument doc = load(id);
             T result = edit.apply(new DmnEditor(doc));
             repository.write(id, doc.toXml(), true);
             return result;
+        });
+    }
+
+    /**
+     * Runs {@code action} while holding the model's lock, so that no edit, undo or delete of the model
+     * interleaves with it. The lock is reentrant: the service's own methods may be called from {@code action}.
+     */
+    public <T> T withLock(String id, Supplier<T> action) {
+        ReentrantLock lock = repository.lock(id);
+        lock.lock();
+        try {
+            return action.get();
         } finally {
             lock.unlock();
         }
@@ -114,19 +125,19 @@ public class ModelService {
     /** Replaces the whole source after validating that it parses as DMN. */
     public void replaceSource(String id, String xml) {
         DmnDocument.parse(xml);
-        ReentrantLock lock = repository.lock(id);
-        lock.lock();
-        try {
+        withLock(id, () -> {
             xml(id);
             repository.write(id, xml, true);
-        } finally {
-            lock.unlock();
-        }
+            return null;
+        });
     }
 
     public void delete(String id) {
-        xml(id);
-        repository.delete(id);
+        withLock(id, () -> {
+            xml(id);
+            repository.delete(id);
+            return null;
+        });
     }
 
     public boolean canUndo(String id) {
@@ -134,12 +145,6 @@ public class ModelService {
     }
 
     public boolean undo(String id) {
-        ReentrantLock lock = repository.lock(id);
-        lock.lock();
-        try {
-            return repository.undo(id);
-        } finally {
-            lock.unlock();
-        }
+        return withLock(id, () -> repository.undo(id));
     }
 }

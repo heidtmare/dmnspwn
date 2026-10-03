@@ -3,6 +3,7 @@ package heidtmare.dmnspwn.xml;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -20,6 +21,18 @@ import org.w3c.dom.NodeList;
  * survives a round trip untouched.
  */
 public final class DmnDocument {
+
+    /** Id prefixes of elements whose DMN type is not their capitalized element name. */
+    private static final Map<String, String> ID_PREFIXES = Map.of(
+            "rule", "DecisionRule",
+            "input", "InputClause",
+            "output", "OutputClause",
+            "inputEntry", "UnaryTests",
+            "outputEntry", "LiteralExpression",
+            "inputExpression", "LiteralExpression",
+            "variable", "InformationItem",
+            "parameter", "InformationItem",
+            "column", "InformationItem");
 
     private final Document dom;
     private final Element definitions;
@@ -193,6 +206,12 @@ public final class DmnDocument {
         }
         parent.appendChild(child);
         return child;
+    }
+
+    /** The prefix of generated ids for an element, named after its DMN type, e.g. {@code DecisionRule}. */
+    public static String idPrefix(String localName) {
+        return ID_PREFIXES.getOrDefault(localName,
+                Character.toUpperCase(localName.charAt(0)) + localName.substring(1));
     }
 
     public String uniqueId(String prefix) {

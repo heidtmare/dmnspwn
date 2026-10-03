@@ -90,14 +90,16 @@ public class S3Sync {
         DmnDocument.parse(object.content());
         String existing = linkedModels().get(object.key());
         if (existing != null) {
-            if (localChanged(existing)) {
-                throw new DmnEditException(("Model '%s' is linked to %s and has unpublished local changes. "
-                        + "Open it and publish them, or use 'Pull from S3' to discard them.")
-                        .formatted(existing, bucket.location(object.key())));
-            }
-            models.replaceSource(existing, object.content());
-            remember(existing, object.key(), object.etag(), object.content());
-            return existing;
+            return models.withLock(existing, () -> {
+                if (localChanged(existing)) {
+                    throw new DmnEditException(("Model '%s' is linked to %s and has unpublished local changes. "
+                            + "Open it and publish them, or use 'Pull from S3' to discard them.")
+                            .formatted(existing, bucket.location(object.key())));
+                }
+                models.replaceSource(existing, object.content());
+                remember(existing, object.key(), object.etag(), object.content());
+                return existing;
+            });
         }
         String name = object.key().substring(object.key().lastIndexOf('/') + 1);
         String id = models.importXml(name, object.content());
@@ -110,8 +112,11 @@ public class S3Sync {
         Link link = link(id).orElseThrow(() -> new DmnEditException("This model is not linked to an S3 object"));
         RemoteObject object = bucket.get(link.key());
         DmnDocument.parse(object.content());
-        models.replaceSource(id, object.content());
-        remember(id, object.key(), object.etag(), object.content());
+        models.withLock(id, () -> {
+            models.replaceSource(id, object.content());
+            remember(id, object.key(), object.etag(), object.content());
+            return null;
+        });
     }
 
     /**
@@ -137,9 +142,12 @@ public class S3Sync {
     }
 
     public void unlink(String id) {
-        Properties p = repository.readMeta(id);
-        p.keySet().removeIf(k -> k.toString().startsWith("s3."));
-        repository.writeMeta(id, p);
+        models.withLock(id, () -> {
+            Properties p = repository.readMeta(id);
+            p.keySet().removeIf(k -> k.toString().startsWith("s3."));
+            repository.writeMeta(id, p);
+            return null;
+        });
     }
 
     public String defaultKey(String id) {
@@ -166,17 +174,21 @@ public class S3Sync {
         return link(id).map(l -> !sha256(models.xml(id)).equals(l.hash())).orElse(false);
     }
 
+    /** Records a sync; the metadata is read, changed and written under the model's lock. */
     private void remember(String id, String key, String etag, String content) {
-        Properties p = repository.readMeta(id);
-        p.setProperty(KEY, key);
-        if (etag == null) {
-            p.remove(ETAG);
-        } else {
-            p.setProperty(ETAG, etag);
-        }
-        p.setProperty(HASH, sha256(content));
-        p.setProperty(SYNCED, Instant.now().toString());
-        repository.writeMeta(id, p);
+        models.withLock(id, () -> {
+            Properties p = repository.readMeta(id);
+            p.setProperty(KEY, key);
+            if (etag == null) {
+                p.remove(ETAG);
+            } else {
+                p.setProperty(ETAG, etag);
+            }
+            p.setProperty(HASH, sha256(content));
+            p.setProperty(SYNCED, Instant.now().toString());
+            repository.writeMeta(id, p);
+            return null;
+        });
     }
 
     static String sha256(String content) {

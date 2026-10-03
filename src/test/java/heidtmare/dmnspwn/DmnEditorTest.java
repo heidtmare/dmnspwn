@@ -91,6 +91,33 @@ class DmnEditorTest {
         assertThat(reread(doc).element("Dish").orElseThrow().requires()).hasSize(1);
     }
 
+    /** Has no id (copied from an entry without one) or a generated id with the expected prefix. */
+    private static boolean idLike(Element e, String prefix) {
+        return !e.hasAttribute("id") || e.getAttribute("id").startsWith(prefix);
+    }
+
+    @Test
+    void duplicatedRulesGetIdsLikeNewRules() {
+        DmnDocument doc = TestModels.loan();
+        DmnEditor ed = new DmnEditor(doc);
+        for (String action : List.of("addRule:0", "duplicateRule:1")) {
+            DecisionTableForm f = new DecisionTableForm();
+            f.setHitPolicy("UNIQUE");
+            f.setAction(action);
+            ed.saveDecisionTable("Risk_Category", f);
+        }
+
+        Element table = ed.logic("Risk_Category").orElseThrow();
+        Element added = doc.children(table, "rule").get(1);
+        Element duplicate = doc.children(table, "rule").get(2);
+        assertThat(doc.children(duplicate, "inputEntry")).allMatch(e -> e.hasAttribute("id"));
+        for (Element rule : List.of(duplicate, added)) {
+            assertThat(rule.getAttribute("id")).startsWith("DecisionRule_");
+            assertThat(doc.children(rule, "inputEntry")).allMatch(e -> idLike(e, "UnaryTests_"));
+            assertThat(doc.children(rule, "outputEntry")).allMatch(e -> idLike(e, "LiteralExpression_"));
+        }
+    }
+
     @Test
     void editsDecisionTablesStructurally() {
         DmnDocument doc = TestModels.loan();

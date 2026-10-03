@@ -151,7 +151,7 @@ public final class DiagramEditor {
             if (s == null || t == null) {
                 continue;
             }
-            String id = doc.ensureId(c.element(), idPrefix(c.element().getLocalName()));
+            String id = doc.ensureId(c.element(), DmnDocument.idPrefix(c.element().getLocalName()));
             if (existing.add(id)) {
                 Point[] pts = Geometry.connect(DiagramBuilder.bounds(s).orElseThrow(),
                         DiagramBuilder.bounds(t).orElseThrow());
@@ -267,9 +267,5 @@ public final class DiagramEditor {
             wp.setAttribute("y", Geometry.fmt(p.y()));
             owner.insertBefore(wp, label); // waypoints precede an edge's DMNLabel
         }
-    }
-
-    static String idPrefix(String localName) {
-        return Character.toUpperCase(localName.charAt(0)) + localName.substring(1);
     }
 }

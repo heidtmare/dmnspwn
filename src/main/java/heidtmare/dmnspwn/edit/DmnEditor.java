@@ -76,7 +76,7 @@ public final class DmnEditor {
     public String addElement(ElementKind kind, String name, String diagramId) {
         String label = required(name, kind == ElementKind.TEXT_ANNOTATION ? "Text" : "Name");
         Element e = doc.create(kind.localName());
-        String id = doc.uniqueId(DiagramEditor.idPrefix(kind.localName()));
+        String id = doc.uniqueId(DmnDocument.idPrefix(kind.localName()));
         e.setAttribute("id", id);
         if (kind == ElementKind.TEXT_ANNOTATION) {
             doc.setText(e, label);
@@ -189,7 +189,7 @@ public final class DmnEditor {
             }
             Element req = doc.create(kind.localName());
             if (!DmnNamespaces.DMN_1_1.equals(doc.ns())) {
-                req.setAttribute("id", doc.uniqueId(DiagramEditor.idPrefix(kind.localName())));
+                req.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix(kind.localName())));
             }
             Element ref = doc.create(kind.referenceElement(sk));
             ref.setAttribute("href", Href.local(sourceId));
@@ -341,7 +341,7 @@ public final class DmnEditor {
 
     private Element newExpression(LogicType type, Element owner) {
         Element expr = doc.create(type.localName());
-        expr.setAttribute("id", doc.uniqueId(DiagramEditor.idPrefix(type.localName())));
+        expr.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix(type.localName())));
         switch (type) {
             case LITERAL -> doc.setText(expr, "");
             case DECISION_TABLE -> initDecisionTable(expr, owner);
@@ -716,13 +716,13 @@ public final class DmnEditor {
 
     private void reassignIds(Element root) {
         if (root.hasAttribute("id")) {
-            root.setAttribute("id", doc.uniqueId(DiagramEditor.idPrefix(root.getLocalName())));
+            root.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix(root.getLocalName())));
         }
         NodeList all = root.getElementsByTagNameNS("*", "*");
         for (int k = 0; k < all.getLength(); k++) {
             Element e = (Element) all.item(k);
             if (e.hasAttribute("id")) {
-                e.setAttribute("id", doc.uniqueId(DiagramEditor.idPrefix(e.getLocalName())));
+                e.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix(e.getLocalName())));
             }
         }
     }
