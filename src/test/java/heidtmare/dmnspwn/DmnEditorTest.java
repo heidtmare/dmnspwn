@@ -22,6 +22,7 @@ import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.ExpressionView;
+import heidtmare.dmnspwn.model.HitPolicy;
 import heidtmare.dmnspwn.validate.DmnValidator;
 import heidtmare.dmnspwn.xml.DmnDocument;
 import heidtmare.dmnspwn.xml.DmnNamespaces;
@@ -155,8 +156,28 @@ class DmnEditorTest {
         assertThat(table.rules()).hasSize(7);
         assertThat(table.rules()).allMatch(r -> r.inputs().size() == 2 && r.outputs().size() == 1
                 && r.annotations().size() == 1);
-        assertThat(table.hitPolicy()).isEqualTo("UNIQUE");
+        assertThat(table.hitPolicy()).isEqualTo(HitPolicy.UNIQUE);
         assertThat(table.aggregation()).isNull();
+    }
+
+    @Test
+    void readsBlankHitPoliciesAsUniqueAndRejectsUnknownOnes() {
+        DmnDocument doc = TestModels.loan();
+        DmnEditor ed = new DmnEditor(doc);
+        DecisionTableForm form = new DecisionTableForm();
+        form.setHitPolicy("");
+        ed.saveDecisionTable("Risk_Category", form);
+        var table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
+        assertThat(table.hitPolicy()).isEqualTo(HitPolicy.UNIQUE);
+
+        form.setHitPolicy("RULE ORDER");
+        ed.saveDecisionTable("Risk_Category", form);
+        table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
+        assertThat(table.hitPolicyCode()).isEqualTo("R");
+
+        form.setHitPolicy("SOMETIMES");
+        assertThatThrownBy(() -> ed.saveDecisionTable("Risk_Category", form))
+                .isInstanceOf(DmnEditException.class).hasMessageContaining("Unknown hit policy");
     }
 
     @Test

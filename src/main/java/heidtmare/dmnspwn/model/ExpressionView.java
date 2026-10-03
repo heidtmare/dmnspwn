@@ -41,7 +41,7 @@ public sealed interface ExpressionView {
                 String description) {
     }
 
-    record DecisionTable(String id, String typeRef, String hitPolicy, String aggregation, String outputLabel,
+    record DecisionTable(String id, String typeRef, HitPolicy hitPolicy, String aggregation, String outputLabel,
                          String orientation, List<InputClause> inputs, List<OutputClause> outputs,
                          List<String> annotations, List<Rule> rules) implements ExpressionView {
         public String type() {
@@ -54,17 +54,8 @@ public sealed interface ExpressionView {
 
         /** Single-letter hit policy notation from the DMN specification (e.g. {@code U}, {@code C+}). */
         public String hitPolicyCode() {
-            String hp = hitPolicy == null || hitPolicy.isBlank() ? "UNIQUE" : hitPolicy;
-            String code = switch (hp) {
-                case "ANY" -> "A";
-                case "PRIORITY" -> "P";
-                case "FIRST" -> "F";
-                case "OUTPUT ORDER" -> "O";
-                case "RULE ORDER" -> "R";
-                case "COLLECT" -> "C";
-                default -> "U";
-            };
-            if ("C".equals(code) && aggregation != null) {
+            String code = hitPolicy.code();
+            if (hitPolicy == HitPolicy.COLLECT && aggregation != null) {
                 code += switch (aggregation) {
                     case "SUM" -> "+";
                     case "COUNT" -> "#";
@@ -77,7 +68,7 @@ public sealed interface ExpressionView {
         }
 
         public String hitPolicyLabel() {
-            String hp = hitPolicy == null || hitPolicy.isBlank() ? "UNIQUE" : hitPolicy;
+            String hp = hitPolicy.attribute();
             return aggregation == null || aggregation.isBlank() ? hp : hp + " " + aggregation;
         }
     }

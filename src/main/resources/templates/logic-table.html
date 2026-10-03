@@ -30,8 +30,8 @@
         <div class="toolbar">
             <label class="inline-label">Hit policy
                 <select name="hitPolicy">
-                    <option th:each="h : ${hitPolicies}" th:value="${h}" th:text="${h}"
-                            th:selected="${h == (table.hitPolicy() ?: 'UNIQUE')}">UNIQUE</option>
+                    <option th:each="h : ${hitPolicies}" th:value="${h.attribute()}" th:text="${h.attribute()}"
+                            th:selected="${h == table.hitPolicy()}">UNIQUE</option>
                 </select>
             </label>
             <label class="inline-label">Aggregation

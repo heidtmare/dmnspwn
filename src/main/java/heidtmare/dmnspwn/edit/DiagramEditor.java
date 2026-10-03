@@ -12,11 +12,11 @@ import java.util.Set;
 import org.w3c.dom.Element;
 
 import heidtmare.dmnspwn.diagram.AutoLayout;
-import heidtmare.dmnspwn.diagram.DiagramBuilder;
+import heidtmare.dmnspwn.diagram.Dmndi;
 import heidtmare.dmnspwn.diagram.Geometry;
 import heidtmare.dmnspwn.diagram.Geometry.Bounds;
 import heidtmare.dmnspwn.diagram.Geometry.Point;
-import heidtmare.dmnspwn.edit.ConnectionElements.Conn;
+import heidtmare.dmnspwn.model.ConnectionElement;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.xml.DmnDocument;
@@ -59,7 +59,7 @@ public final class DiagramEditor {
     }
 
     public void addShape(Element diagram, String elementId, ElementKind kind, Bounds at) {
-        if (DiagramBuilder.shapesByElement(doc, diagram).containsKey(elementId)) {
+        if (Dmndi.shapesByElement(doc, diagram).containsKey(elementId)) {
             return;
         }
         Bounds b = at != null ? at : freeSlot(diagram, kind);
@@ -68,15 +68,15 @@ public final class DiagramEditor {
     }
 
     public void removeShape(Element diagram, String elementId) {
-        Element shape = DiagramBuilder.shapesByElement(doc, diagram).get(elementId);
+        Element shape = Dmndi.shapesByElement(doc, diagram).get(elementId);
         if (shape == null) {
             return;
         }
         DmnDocument.remove(shape);
         Set<String> connIds = new HashSet<>();
-        for (Conn c : ConnectionElements.all(doc)) {
-            if (elementId.equals(c.sourceId()) || elementId.equals(c.targetId())) {
-                connIds.add(c.element().getAttribute("id"));
+        for (ConnectionElement c : ConnectionElement.all(doc)) {
+            if (c.touches(elementId)) {
+                connIds.add(c.id());
             }
         }
         removeEdges(diagram, connIds);
@@ -84,7 +84,7 @@ public final class DiagramEditor {
 
     /** Moves (and optionally resizes) a shape; decision services carry their contents along. */
     public void move(Element diagram, String elementId, double x, double y, Double width, Double height) {
-        Map<String, Element> shapes = DiagramBuilder.shapesByElement(doc, diagram);
+        Map<String, Element> shapes = Dmndi.shapesByElement(doc, diagram);
         Element shape = shapes.get(elementId);
         Element element = doc.findById(elementId)
                 .orElseThrow(() -> new DmnEditException("Unknown element " + elementId));
@@ -93,7 +93,7 @@ public final class DiagramEditor {
             addShape(diagram, elementId, kind, new Bounds(x, y, kind.width(), kind.height()));
             return;
         }
-        Bounds old = DiagramBuilder.bounds(shape).orElse(new Bounds(x, y, kind.width(), kind.height()));
+        Bounds old = Dmndi.bounds(shape).orElse(new Bounds(x, y, kind.width(), kind.height()));
         Bounds moved = new Bounds(Geometry.round(x), Geometry.round(y),
                 Math.max(MIN_WIDTH, width == null ? old.width() : width),
                 Math.max(MIN_HEIGHT, height == null ? old.height() : height));
@@ -104,14 +104,14 @@ public final class DiagramEditor {
             double dy = moved.y() - old.y();
             shapes.forEach((id, other) -> {
                 if (other != shape) {
-                    DiagramBuilder.bounds(other).filter(old::contains).ifPresent(b -> {
+                    Dmndi.bounds(other).filter(old::contains).ifPresent(b -> {
                         setBounds(other, b.moveTo(b.x() + dx, b.y() + dy));
                         touched.add(id);
                     });
                 }
             });
             anyChildren(shape, "DMNDecisionServiceDividerLine").forEach(line -> {
-                List<Point> pts = DiagramBuilder.waypoints(line);
+                List<Point> pts = Dmndi.waypoints(line);
                 double dividerY = pts.isEmpty() ? moved.cy() : pts.getFirst().y() + dy;
                 dividerY = Math.min(moved.bottom() - 10, Math.max(moved.y() + 10, dividerY));
                 setWaypoints(line, new Point(moved.x(), dividerY), new Point(moved.right(), dividerY));
@@ -123,7 +123,7 @@ public final class DiagramEditor {
     /** Re-applies the automatic layout to every shape on the diagram. */
     public void resetLayout(Element diagram) {
         Map<String, Bounds> layout = AutoLayout.layout(new DmnReader(doc));
-        DiagramBuilder.shapesByElement(doc, diagram).forEach((id, shape) -> {
+        Dmndi.shapesByElement(doc, diagram).forEach((id, shape) -> {
             Bounds b = layout.get(id);
             if (b != null) {
                 setBounds(shape, b);
@@ -137,7 +137,7 @@ public final class DiagramEditor {
 
     /** Adds missing edges for every connection whose ends are both on the diagram. */
     public void syncEdges(Element diagram) {
-        Map<String, Element> shapes = DiagramBuilder.shapesByElement(doc, diagram);
+        Map<String, Element> shapes = Dmndi.shapesByElement(doc, diagram);
         Set<String> existing = new HashSet<>();
         for (Element edge : anyChildren(diagram, "DMNEdge")) {
             String ref = doc.localIdOfRef(edge, edge.getAttribute("dmnElementRef"));
@@ -145,7 +145,7 @@ public final class DiagramEditor {
                 existing.add(ref);
             }
         }
-        for (Conn c : ConnectionElements.all(doc)) {
+        for (ConnectionElement c : ConnectionElement.all(doc)) {
             Element s = shapes.get(c.sourceId());
             Element t = shapes.get(c.targetId());
             if (s == null || t == null) {
@@ -153,8 +153,8 @@ public final class DiagramEditor {
             }
             String id = doc.ensureId(c.element(), DmnDocument.idPrefix(c.element().getLocalName()));
             if (existing.add(id)) {
-                Point[] pts = Geometry.connect(DiagramBuilder.bounds(s).orElseThrow(),
-                        DiagramBuilder.bounds(t).orElseThrow());
+                Point[] pts = Geometry.connect(Dmndi.bounds(s).orElseThrow(),
+                        Dmndi.bounds(t).orElseThrow());
                 Element edge = doc.createDi(doc.dmndiNs(), "DMNEdge");
                 edge.setAttribute("id", doc.uniqueId("DMNEdge"));
                 edge.setAttribute("dmnElementRef", id);
@@ -194,25 +194,24 @@ public final class DiagramEditor {
     // ---- helpers -------------------------------------------------------------------------------
 
     private void reroute(Element diagram, Set<String> touched) {
-        Map<String, Element> shapes = DiagramBuilder.shapesByElement(doc, diagram);
-        Map<String, Conn> byId = new HashMap<>();
-        for (Conn c : ConnectionElements.all(doc)) {
-            String id = c.element().getAttribute("id");
-            if (!id.isEmpty()) {
-                byId.put(id, c);
+        Map<String, Element> shapes = Dmndi.shapesByElement(doc, diagram);
+        Map<String, ConnectionElement> byId = new HashMap<>();
+        for (ConnectionElement c : ConnectionElement.all(doc)) {
+            if (c.id() != null) {
+                byId.put(c.id(), c);
             }
         }
         for (Element edge : anyChildren(diagram, "DMNEdge")) {
             String ref = doc.localIdOfRef(edge, edge.getAttribute("dmnElementRef"));
-            Conn c = ref == null ? null : byId.get(ref);
+            ConnectionElement c = ref == null ? null : byId.get(ref);
             if (c == null || touched != null && !touched.contains(c.sourceId()) && !touched.contains(c.targetId())) {
                 continue;
             }
             Element s = shapes.get(c.sourceId());
             Element t = shapes.get(c.targetId());
             if (s != null && t != null) {
-                setWaypoints(edge, Geometry.connect(DiagramBuilder.bounds(s).orElseThrow(),
-                        DiagramBuilder.bounds(t).orElseThrow()));
+                setWaypoints(edge, Geometry.connect(Dmndi.bounds(s).orElseThrow(),
+                        Dmndi.bounds(t).orElseThrow()));
             }
         }
     }
@@ -239,7 +238,7 @@ public final class DiagramEditor {
         double right = Double.NaN;
         double top = Double.NaN;
         for (Element shape : anyChildren(diagram, "DMNShape")) {
-            Optional<Bounds> b = DiagramBuilder.bounds(shape);
+            Optional<Bounds> b = Dmndi.bounds(shape);
             if (b.isPresent()) {
                 right = Double.isNaN(right) ? b.get().right() : Math.max(right, b.get().right());
                 top = Double.isNaN(top) ? b.get().y() : Math.min(top, b.get().y());

@@ -202,13 +202,7 @@ public final class ModelEvaluator {
                     trace().warning("Required element '" + c.sourceName() + "' is imported or missing and was not evaluated");
                     continue;
                 }
-                Val value = switch (source.kind()) {
-                    case INPUT_DATA -> inputs.getOrDefault(source.id(), Values.NULL);
-                    case DECISION -> decision(source);
-                    case BUSINESS_KNOWLEDGE_MODEL -> knowledgeModel(source);
-                    case DECISION_SERVICE -> service(source);
-                    default -> null;
-                };
+                Val value = value(source);
                 if (value != null) {
                     scope.put(source.name(), value);
                 }
@@ -299,55 +293,52 @@ public final class ModelEvaluator {
                 @Override
                 public Val resolve(String name) {
                     ElementView e = byName.get(name);
-                    if (e == null) {
-                        return null;
-                    }
-                    return switch (e.kind()) {
-                        case INPUT_DATA -> inputs.getOrDefault(e.id(), Values.NULL);
-                        case DECISION -> decision(e);
-                        case BUSINESS_KNOWLEDGE_MODEL -> knowledgeModel(e);
-                        case DECISION_SERVICE -> service(e);
-                        default -> null;
-                    };
+                    return e == null ? null : value(e);
                 }
             });
+        }
+
+        /** The value an element contributes to a scope, or null for elements without one. */
+        private Val value(ElementView e) {
+            return switch (e.kind()) {
+                case INPUT_DATA -> inputs.getOrDefault(e.id(), Values.NULL);
+                case DECISION -> decision(e);
+                case BUSINESS_KNOWLEDGE_MODEL -> knowledgeModel(e);
+                case DECISION_SERVICE -> service(e);
+                default -> null;
+            };
         }
     }
 
     // ---- input form ----------------------------------------------------------------------------
 
-    /** Built-in base type of a type reference, following item definitions. */
-    private String baseType(String typeRef) {
-        String t = typeRef;
-        for (int depth = 0; t != null && depth < 20; depth++) {
-            ItemDefinitionView item = types.get(t);
-            if (item == null) {
-                return t;
-            }
-            if (item.collection()) {
-                return "list";
-            }
-            if (!item.components().isEmpty()) {
-                return "structure:" + item.name();
-            }
-            t = item.typeRef();
+    /**
+     * The item definitions a type reference resolves through, in order, until it reaches a name that is not an item
+     * definition (a built-in or unknown type). A cyclic definition ends the chain where it would repeat.
+     */
+    private List<ItemDefinitionView> typeChain(String typeRef) {
+        List<ItemDefinitionView> chain = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String t = typeRef; t != null && seen.add(t) && types.containsKey(t); t = types.get(t).typeRef()) {
+            chain.add(types.get(t));
         }
-        return null;
+        return chain;
     }
 
     private String placeholder(String typeRef) {
-        String base = baseType(typeRef);
+        List<ItemDefinitionView> chain = typeChain(typeRef);
+        String base = chain.isEmpty() ? typeRef : chain.getLast().typeRef();
+        for (ItemDefinitionView item : chain) {
+            if (item.collection()) {
+                base = "list";
+                break;
+            }
+            if (!item.components().isEmpty()) {
+                return structurePlaceholder(item);
+            }
+        }
         if (base == null) {
             return "FEEL expression";
-        }
-        if (base.startsWith("structure:")) {
-            ItemDefinitionView item = types.get(base.substring("structure:".length()));
-            StringBuilder sb = new StringBuilder("{");
-            for (ItemDefinitionView c : item.components()) {
-                sb.append(sb.length() == 1 ? "" : ", ")
-                        .append(Feel.isIdentifier(c.name()) ? c.name() : "\"" + c.name() + "\"").append(": …");
-            }
-            return sb.append('}').toString();
         }
         return switch (BuiltInTypes.canonical(base)) {
             case "number" -> "e.g. 42";
@@ -364,22 +355,27 @@ public final class ModelEvaluator {
         };
     }
 
+    private static String structurePlaceholder(ItemDefinitionView item) {
+        StringBuilder sb = new StringBuilder("{");
+        for (ItemDefinitionView c : item.components()) {
+            sb.append(sb.length() == 1 ? "" : ", ")
+                    .append(Feel.isIdentifier(c.name()) ? c.name() : "\"" + c.name() + "\"").append(": …");
+        }
+        return sb.append('}').toString();
+    }
+
     /** Allowed values of the (item definition) type, as FEEL literals. */
     private List<String> suggestions(String typeRef) {
-        String t = typeRef;
-        for (int depth = 0; t != null && depth < 20; depth++) {
-            ItemDefinitionView item = types.get(t);
-            if (item == null) {
-                return "boolean".equals(t) ? List.of("true", "false") : List.of();
-            }
+        List<ItemDefinitionView> chain = typeChain(typeRef);
+        for (ItemDefinitionView item : chain) {
             if (item.allowedValues() != null && !item.allowedValues().isBlank()) {
                 Feel.Result r = feel.evaluate("[" + item.allowedValues() + "]", Scope.empty());
                 return r.failed() || !r.warnings().isEmpty() ? List.of()
                         : Values.items(r.value()).stream().map(Values::format).toList();
             }
-            t = item.typeRef();
         }
-        return List.of();
+        String base = chain.isEmpty() ? typeRef : chain.getLast().typeRef();
+        return "boolean".equals(base) ? List.of("true", "false") : List.of();
     }
 
     // ---- names ---------------------------------------------------------------------------------

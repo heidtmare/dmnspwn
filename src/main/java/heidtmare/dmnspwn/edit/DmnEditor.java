@@ -3,8 +3,6 @@ package heidtmare.dmnspwn.edit;
 import static heidtmare.dmnspwn.xml.DmnDocument.attr;
 import static heidtmare.dmnspwn.xml.DmnDocument.setAttr;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -18,8 +16,7 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import heidtmare.dmnspwn.diagram.DiagramBuilder;
-import heidtmare.dmnspwn.edit.ConnectionElements.Conn;
+import heidtmare.dmnspwn.diagram.Dmndi;
 import heidtmare.dmnspwn.edit.Forms.Action;
 import heidtmare.dmnspwn.edit.Forms.ComponentRow;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
@@ -31,9 +28,12 @@ import heidtmare.dmnspwn.edit.Forms.ParameterRow;
 import heidtmare.dmnspwn.edit.Forms.ParametersForm;
 import heidtmare.dmnspwn.edit.Forms.RuleRow;
 import heidtmare.dmnspwn.edit.Forms.ServiceForm;
+import heidtmare.dmnspwn.model.ConnectionElement;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
+import heidtmare.dmnspwn.model.HitPolicy;
+import heidtmare.dmnspwn.model.RequirementGraph;
 import heidtmare.dmnspwn.xml.DmnDocument;
 import heidtmare.dmnspwn.xml.DmnFormatException;
 import heidtmare.dmnspwn.xml.DmnNamespaces;
@@ -42,8 +42,6 @@ import heidtmare.dmnspwn.xml.Href;
 /** Mutations of a DMN model. Each method edits the DOM in place, preserving unknown content. */
 public final class DmnEditor {
 
-    public static final List<String> HIT_POLICIES =
-            List.of("UNIQUE", "FIRST", "PRIORITY", "ANY", "COLLECT", "RULE ORDER", "OUTPUT ORDER");
     public static final List<String> AGGREGATIONS = List.of("SUM", "COUNT", "MIN", "MAX");
 
     private final DmnDocument doc;
@@ -129,13 +127,13 @@ public final class DmnEditor {
     public void deleteElement(String id) {
         Element e = node(id);
         Set<String> removedConnections = new HashSet<>();
-        for (Conn c : ConnectionElements.all(doc)) {
-            if (id.equals(c.sourceId()) || id.equals(c.targetId())) {
-                String connId = c.element().getAttribute("id");
-                if (!connId.isEmpty()) {
-                    removedConnections.add(connId);
+        for (ConnectionElement c : ConnectionElement.all(doc)) {
+            if (c.touches(id)) {
+                if (c.id() != null) {
+                    removedConnections.add(c.id());
                 }
-                if (!id.equals(c.targetId()) || "association".equals(c.element().getLocalName())) {
+                // The element's own requirements go with it.
+                if (!id.equals(c.targetId()) || !c.kind().isRequirement()) {
                     DmnDocument.remove(c.element());
                 }
             }
@@ -164,17 +162,13 @@ public final class DmnEditor {
         ConnectionKind kind = ConnectionKind.between(sk, tk).orElseThrow(() -> new DmnEditException(
                 "DMN does not allow a connection from a %s to a %s".formatted(sk.displayName(), tk.displayName())));
 
-        for (Conn c : ConnectionElements.all(doc)) {
-            boolean same = sourceId.equals(c.sourceId()) && targetId.equals(c.targetId())
-                    || kind == ConnectionKind.ASSOCIATION && sourceId.equals(c.targetId())
-                    && targetId.equals(c.sourceId());
-            if (same && kind.localName().equals(c.element().getLocalName())) {
-                throw new DmnEditException("These elements are already connected");
-            }
+        List<ConnectionElement> existing = ConnectionElement.all(doc);
+        if (existing.stream().anyMatch(c -> c.kind() == kind && c.connects(sourceId, targetId))) {
+            throw new DmnEditException("These elements are already connected");
         }
 
         if (kind == ConnectionKind.ASSOCIATION) {
-            Element assoc = doc.create("association");
+            Element assoc = doc.create(kind.localName());
             assoc.setAttribute("id", doc.uniqueId("Association"));
             Element src = doc.create("sourceRef");
             src.setAttribute("href", Href.local(sourceId));
@@ -184,7 +178,7 @@ public final class DmnEditor {
             assoc.appendChild(tgt);
             doc.insert(doc.definitions(), assoc);
         } else {
-            if (dependsOn(sourceId, targetId)) {
+            if (new RequirementGraph(existing).dependsOn(sourceId, targetId)) {
                 throw new DmnEditException("That connection would create a cycle in the requirement graph");
             }
             Element req = doc.create(kind.localName());
@@ -202,56 +196,14 @@ public final class DmnEditor {
         return kind;
     }
 
-    /** Removes a connection by id or by the synthetic {@code target|kind|source} reference. */
+    /** Removes a connection by its {@link ConnectionElement#ref() reference}. */
     public void disconnect(String ref) {
-        Element conn = null;
-        if (ref != null && ref.contains("|")) {
-            String[] parts = ref.split("\\|", 3);
-            for (Conn c : ConnectionElements.all(doc)) {
-                boolean match = "association".equals(parts[0])
-                        ? "association".equals(c.element().getLocalName()) && parts[1].equals(c.sourceId())
-                        && parts[2].equals(c.targetId())
-                        : parts[0].equals(c.targetId()) && parts[1].equals(c.element().getLocalName())
-                        && parts[2].equals(c.sourceId());
-                if (match) {
-                    conn = c.element();
-                    break;
-                }
-            }
-        } else {
-            conn = doc.findById(ref).filter(e -> ConnectionElements.REQUIREMENTS.contains(e.getLocalName())
-                    || "association".equals(e.getLocalName())).orElse(null);
+        ConnectionElement conn = ConnectionElement.all(doc).stream().filter(c -> c.ref().equals(ref)).findFirst()
+                .orElseThrow(() -> new DmnEditException("Connection not found"));
+        DmnDocument.remove(conn.element());
+        if (conn.id() != null) {
+            diagrams.purge(null, Set.of(conn.id()));
         }
-        if (conn == null) {
-            throw new DmnEditException("Connection not found");
-        }
-        String id = conn.getAttribute("id");
-        DmnDocument.remove(conn);
-        if (!id.isEmpty()) {
-            diagrams.purge(null, Set.of(id));
-        }
-    }
-
-    /** Whether {@code a} (transitively) requires {@code b}. */
-    private boolean dependsOn(String a, String b) {
-        List<Conn> all = ConnectionElements.all(doc);
-        Deque<String> queue = new ArrayDeque<>(List.of(a));
-        Set<String> seen = new HashSet<>();
-        while (!queue.isEmpty()) {
-            String current = queue.pop();
-            if (current.equals(b)) {
-                return true;
-            }
-            if (seen.add(current)) {
-                for (Conn c : all) {
-                    if (current.equals(c.targetId()) && c.sourceId() != null
-                            && !"association".equals(c.element().getLocalName())) {
-                        queue.push(c.sourceId());
-                    }
-                }
-            }
-        }
-        return false;
     }
 
     // ---- decision services ---------------------------------------------------------------------
@@ -386,7 +338,7 @@ public final class DmnEditor {
 
     /** Seeds a decision table with one input per information requirement of the decision. */
     private void initDecisionTable(Element table, Element owner) {
-        table.setAttribute("hitPolicy", "UNIQUE");
+        table.setAttribute("hitPolicy", HitPolicy.UNIQUE.attribute());
         DmnReader reader = new DmnReader(doc);
         int inputs = 0;
         for (Element req : doc.children(owner, "informationRequirement")) {
@@ -508,12 +460,10 @@ public final class DmnEditor {
     public void saveDecisionTable(String elementId, DecisionTableForm f) {
         Element table = logic(elementId).filter(e -> "decisionTable".equals(e.getLocalName()))
                 .orElseThrow(() -> new DmnEditException("The element's logic is not a decision table"));
-        String hitPolicy = f.getHitPolicy() == null || f.getHitPolicy().isBlank() ? "UNIQUE" : f.getHitPolicy();
-        if (!HIT_POLICIES.contains(hitPolicy)) {
-            throw new DmnEditException("Unknown hit policy " + hitPolicy);
-        }
-        table.setAttribute("hitPolicy", hitPolicy);
-        String aggregation = "COLLECT".equals(hitPolicy) && AGGREGATIONS.contains(f.getAggregation())
+        HitPolicy hitPolicy = HitPolicy.fromAttribute(f.getHitPolicy())
+                .orElseThrow(() -> new DmnEditException("Unknown hit policy " + f.getHitPolicy()));
+        table.setAttribute("hitPolicy", hitPolicy.attribute());
+        String aggregation = hitPolicy == HitPolicy.COLLECT && AGGREGATIONS.contains(f.getAggregation())
                 ? f.getAggregation() : null;
         setAttr(table, "aggregation", aggregation);
         setAttr(table, "outputLabel", f.getOutputLabel());
@@ -961,7 +911,7 @@ public final class DmnEditor {
     /** Exposed for the element page: the shape bounds of an element on a diagram, if any. */
     public Optional<heidtmare.dmnspwn.diagram.Geometry.Bounds> shapeBounds(String diagramId, String elementId) {
         return doc.diagram(diagramId)
-                .map(d -> DiagramBuilder.shapesByElement(doc, d).get(elementId))
-                .flatMap(DiagramBuilder::bounds);
+                .map(d -> Dmndi.shapesByElement(doc, d).get(elementId))
+                .flatMap(Dmndi::bounds);
     }
 }
