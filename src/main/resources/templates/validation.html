@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Validation · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('validation')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="panel">
+        <p class="ok-text" th:if="${issues.isEmpty()}">No problems found.</p>
+        <div class="table-wrap" th:unless="${issues.isEmpty()}">
+            <table class="list">
+                <thead><tr><th>Severity</th><th>Element</th><th>Problem</th></tr></thead>
+                <tbody>
+                <tr th:each="i : ${issues}">
+                    <td><span class="sev" th:classappend="${i.isError()} ? 'sev-error' : 'sev-warning'" th:text="${i.isError()} ? 'Error' : 'Warning'">Error</span></td>
+                    <td>
+                        <a th:if="${i.elementId() != null}" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${i.elementId()})}" th:text="${i.elementName() ?: i.elementId()}">x</a>
+                        <span th:if="${i.elementId() == null}" class="muted">Model</span>
+                    </td>
+                    <td th:text="${i.message()}">message</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="hint top-gap">Structural checks only (names, references, requirement rules, cycles, decision table shape).
+            Use the <a th:href="@{/models/{id}/evaluate(id=${modelId})}">Evaluate</a> tab to run the decisions.</p>
+    </section>
+</main>
+</body>
+</html>

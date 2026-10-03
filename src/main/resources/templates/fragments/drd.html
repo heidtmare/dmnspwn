@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<svg th:fragment="drd(diagram, editable)" xmlns="http://www.w3.org/2000/svg" class="drd"
+     th:attr="viewBox=${diagram.viewBox()},width=${diagram.width()},height=${diagram.height()},data-diagram=${diagram.diagramId()},data-editable=${editable},data-base=${linkBase},data-model-url=${modelUrl},aria-label=${'Decision requirements diagram: ' + diagram.name()}"
+     role="img">
+    <style>
+        .drd { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
+        .drd .shape { fill: var(--drd-fill, #ffffff); stroke: var(--drd-stroke, #1f2937); stroke-width: 1.5; }
+        .drd .node-decision .shape { fill: var(--drd-decision, #eef4ff); }
+        .drd .node-input-data .shape { fill: var(--drd-input, #ecfdf3); }
+        .drd .node-business-knowledge-model .shape { fill: var(--drd-bkm, #fff7e6); }
+        .drd .node-knowledge-source .shape { fill: var(--drd-source, #f5f0ff); }
+        .drd .node-decision-service .shape { fill: var(--drd-service, rgba(148, 163, 184, 0.08)); stroke-width: 2.5; }
+        .drd .node-text-annotation .shape { fill: none; }
+        .drd .node-external .shape { stroke-dasharray: 5 3; fill: var(--drd-fill, #ffffff); }
+        .drd .divider { fill: none; stroke: var(--drd-stroke, #1f2937); stroke-width: 1.5; }
+        .drd .hit { fill: transparent; stroke: none; }
+        .drd .label { fill: var(--drd-text, #111827); }
+        .drd .node-decision-service .label { font-weight: 600; }
+        .drd .node-text-annotation .label { fill: var(--drd-muted, #4b5563); font-style: italic; }
+        .drd .edge { fill: none; stroke: var(--drd-edge, #374151); stroke-width: 1.5; }
+        .drd .edge-knowledge, .drd .edge-authority { stroke-dasharray: 7 4; }
+        .drd .edge-association { stroke-dasharray: 2 4; }
+        .drd .m-fill { fill: var(--drd-edge, #374151); }
+        .drd .m-open { fill: none; stroke: var(--drd-edge, #374151); stroke-width: 1.5; }
+        .drd a:hover .shape, .drd a:focus .shape { stroke: var(--drd-accent, #2563eb); stroke-width: 2.5; }
+    </style>
+    <defs>
+        <marker id="m-information" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="11" markerHeight="11"
+                markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0 0 L10 5 L0 10 Z" class="m-fill"/>
+        </marker>
+        <marker id="m-knowledge" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="13" markerHeight="13"
+                markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M1 1 L11 6 L1 11" class="m-open"/>
+        </marker>
+        <marker id="m-authority" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="9" markerHeight="9"
+                markerUnits="userSpaceOnUse">
+            <circle cx="5" cy="5" r="4.5" class="m-fill"/>
+        </marker>
+    </defs>
+    <g class="containers">
+        <th:block th:each="n : ${diagram.containers()}">
+            <g th:replace="~{fragments/drd :: node(${n})}"></g>
+        </th:block>
+    </g>
+    <g class="shapes">
+        <th:block th:each="n : ${diagram.shapes()}">
+            <g th:replace="~{fragments/drd :: node(${n})}"></g>
+        </th:block>
+    </g>
+    <g class="edges">
+        <path th:each="e : ${diagram.edges()}" th:class="${e.cssClass()}"
+              th:attr="d=${e.d()},marker-end=${e.marker()},data-ref=${e.ref()}"/>
+    </g>
+</svg>
+
+<g th:fragment="node(n)" class="node" th:classappend="${n.cssClass()}"
+   th:attr="data-id=${n.elementId()},data-x=${n.x()},data-y=${n.y()},data-w=${n.w()},data-h=${n.h()}">
+    <title th:text="${n.title()}">Decision</title>
+    <a th:href="${linkBase != null and !n.external()} ? ${linkBase + n.elementId()} : null">
+        <path class="shape" th:attr="d=${n.path()}"/>
+        <path th:if="${n.dividerPath() != null}" class="divider" th:attr="d=${n.dividerPath()}"/>
+        <rect th:if="${n.annotation()}" class="hit" th:attr="x=${n.x()},y=${n.y()},width=${n.w()},height=${n.h()}"/>
+        <text class="label" th:attr="text-anchor=${n.textAnchor()}"><tspan th:each="l : ${n.lines()}" th:attr="x=${l.x()},y=${l.y()}" th:text="${l.text()}">Label</tspan></text>
+    </a>
+</g>
+</body>
+</html>

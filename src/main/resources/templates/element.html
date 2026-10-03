@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${element.displayName()})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('drd')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <datalist th:replace="~{fragments/layout :: types}"></datalist>
+
+    <div class="element-head">
+        <span class="kind big" th:classappend="${'kind-' + element.kind().slug()}" th:text="${element.kind().displayName()}">Decision</span>
+        <h2 th:text="${element.displayName()}">Element</h2>
+        <code class="muted" th:text="${element.id()}">id</code>
+    </div>
+
+    <div class="element-layout">
+        <div class="main-col">
+            <!--/* ---------- properties ---------- */-->
+            <section class="panel">
+                <h3>Properties</h3>
+                <dl class="props" th:unless="${editMode}">
+                    <th:block th:if="${element.kind().name() == 'TEXT_ANNOTATION'}">
+                        <dt>Text</dt><dd class="pre" th:text="${element.text()}">text</dd>
+                    </th:block>
+                    <th:block th:unless="${element.kind().name() == 'TEXT_ANNOTATION'}">
+                        <dt>Name</dt><dd th:text="${element.name()}">name</dd>
+                        <th:block th:if="${element.label() != null}"><dt>Label</dt><dd th:text="${element.label()}">label</dd></th:block>
+                        <th:block th:if="${element.kind().hasVariable()}"><dt>Type</dt><dd><code th:text="${element.typeRef() ?: 'Any (unspecified)'}">string</code></dd></th:block>
+                        <th:block th:if="${element.question() != null}"><dt>Question</dt><dd th:text="${element.question()}">q</dd></th:block>
+                        <th:block th:if="${element.allowedAnswers() != null}"><dt>Allowed answers</dt><dd th:text="${element.allowedAnswers()}">a</dd></th:block>
+                        <th:block th:if="${element.knowledgeType() != null}"><dt>Source type</dt><dd th:text="${element.knowledgeType()}">t</dd></th:block>
+                        <th:block th:if="${element.locationUri() != null}"><dt>Location</dt><dd><a th:href="${element.locationUri()}" th:text="${element.locationUri()}" rel="noopener noreferrer" target="_blank">uri</a></dd></th:block>
+                        <th:block th:if="${element.description() != null}"><dt>Description</dt><dd class="pre" th:text="${element.description()}">d</dd></th:block>
+                    </th:block>
+                </dl>
+
+                <form th:if="${editMode}" method="post" th:action="@{/models/{id}/elements/{e}(id=${modelId},e=${element.id()})}" class="grid-form">
+                    <th:block th:if="${element.kind().name() == 'TEXT_ANNOTATION'}">
+                        <label class="full">Text <textarea name="text" rows="4" required th:text="${element.text()}"></textarea></label>
+                    </th:block>
+                    <th:block th:unless="${element.kind().name() == 'TEXT_ANNOTATION'}">
+                        <label>Name <input name="name" th:value="${element.name()}" required></label>
+                        <label>Label <input name="label" th:value="${element.label()}" placeholder="optional display label"></label>
+                        <label th:if="${element.kind().hasVariable()}">Type
+                            <input name="typeRef" th:value="${element.typeRef()}" list="type-options" placeholder="e.g. string"></label>
+                        <th:block th:if="${element.kind().name() == 'DECISION'}">
+                            <label class="full">Question <input name="question" th:value="${element.question()}"></label>
+                            <label class="full">Allowed answers <input name="allowedAnswers" th:value="${element.allowedAnswers()}"></label>
+                        </th:block>
+                        <th:block th:if="${element.kind().name() == 'KNOWLEDGE_SOURCE'}">
+                            <label>Source type <input name="knowledgeType" th:value="${element.knowledgeType()}" placeholder="e.g. Policy"></label>
+                            <label>Location URI <input name="locationUri" th:value="${element.locationUri()}" type="url"></label>
+                        </th:block>
+                        <label class="full">Description <textarea name="description" rows="3" th:text="${element.description()}"></textarea></label>
+                        <p class="hint full">Renaming does not update FEEL expressions that refer to the old name.</p>
+                    </th:block>
+                    <div class="full actions"><button type="submit" class="primary">Save properties</button></div>
+                </form>
+            </section>
+
+            <!--/* ---------- BKM parameters ---------- */-->
+            <section class="panel" id="parameters" th:if="${element.kind().name() == 'BUSINESS_KNOWLEDGE_MODEL'}">
+                <h3>Signature</h3>
+                <p><code class="signature" th:text="${element.signature()}">f(a, b)</code>
+                    <span class="badge" th:text="${element.functionKind() ?: 'FEEL'}">FEEL</span></p>
+                <form th:if="${editMode}" method="post" th:action="@{/models/{id}/elements/{e}/parameters(id=${modelId},e=${element.id()})}">
+                    <button type="submit" name="action" value="save" class="default-submit" tabindex="-1" aria-hidden="true">Save</button>
+                    <table class="list compact">
+                        <thead><tr><th>Parameter</th><th>Type</th><th></th></tr></thead>
+                        <tbody>
+                        <tr th:each="p, s : ${element.parameters()}">
+                            <td><input th:name="|parameters[${s.index}].name|" th:value="${p.name()}" required></td>
+                            <td><input th:name="|parameters[${s.index}].typeRef|" th:value="${p.typeRef()}" list="type-options"></td>
+                            <td class="row-actions">
+                                <button type="submit" name="action" th:value="|moveParameterUp:${s.index}|" class="icon" title="Move up" th:disabled="${s.first}">↑</button>
+                                <button type="submit" name="action" th:value="|deleteParameter:${s.index}|" class="icon danger" title="Remove">✕</button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div class="actions">
+                        <label class="inline-label">Kind
+                            <select name="functionKind">
+                                <option th:each="k : ${ {'FEEL','Java','PMML'} }" th:value="${k}" th:text="${k}"
+                                        th:selected="${k == (element.functionKind() ?: 'FEEL')}">FEEL</option>
+                            </select>
+                        </label>
+                        <button type="submit" name="action" value="addParameter">Add parameter</button>
+                        <button type="submit" name="action" value="save" class="primary">Save</button>
+                    </div>
+                </form>
+            </section>
+
+            <!--/* ---------- decision service ---------- */-->
+            <section class="panel" th:if="${element.kind().name() == 'DECISION_SERVICE'}">
+                <h3>Decision service</h3>
+                <div class="service-view" th:unless="${editMode}">
+                    <div th:each="group : ${ {'Output decisions','Encapsulated decisions','Input decisions','Input data'} }">
+                        <h4 th:text="${group}">group</h4>
+                        <ul class="plain">
+                            <li th:each="r : ${group == 'Output decisions' ? element.service().outputDecisions() : (group == 'Encapsulated decisions' ? element.service().encapsulatedDecisions() : (group == 'Input decisions' ? element.service().inputDecisions() : element.service().inputData()))}">
+                                <a th:if="${r.local()}" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${r.id()})}" th:text="${r.name()}">x</a>
+                                <span th:unless="${r.local()}" th:text="${r.href()}">x</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <form th:if="${editMode}" method="post" th:action="@{/models/{id}/elements/{e}/service(id=${modelId},e=${element.id()})}">
+                    <div class="service-grid">
+                        <fieldset>
+                            <legend>Output decisions</legend>
+                            <label th:each="d : ${elements}" th:if="${d.kind().name() == 'DECISION'}" class="check">
+                                <input type="checkbox" name="outputDecisions" th:value="${d.id()}"
+                                       th:checked="${element.service().outputDecisions().![id()].contains(d.id())}"> <span th:text="${d.displayName()}">d</span></label>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Encapsulated decisions</legend>
+                            <label th:each="d : ${elements}" th:if="${d.kind().name() == 'DECISION'}" class="check">
+                                <input type="checkbox" name="encapsulatedDecisions" th:value="${d.id()}"
+                                       th:checked="${element.service().encapsulatedDecisions().![id()].contains(d.id())}"> <span th:text="${d.displayName()}">d</span></label>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Input decisions</legend>
+                            <label th:each="d : ${elements}" th:if="${d.kind().name() == 'DECISION'}" class="check">
+                                <input type="checkbox" name="inputDecisions" th:value="${d.id()}"
+                                       th:checked="${element.service().inputDecisions().![id()].contains(d.id())}"> <span th:text="${d.displayName()}">d</span></label>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Input data</legend>
+                            <label th:each="d : ${elements}" th:if="${d.kind().name() == 'INPUT_DATA'}" class="check">
+                                <input type="checkbox" name="inputData" th:value="${d.id()}"
+                                       th:checked="${element.service().inputData().![id()].contains(d.id())}"> <span th:text="${d.displayName()}">d</span></label>
+                        </fieldset>
+                    </div>
+                    <div class="actions"><button type="submit" class="primary">Save service</button></div>
+                </form>
+            </section>
+
+            <!--/* ---------- decision logic ---------- */-->
+            <section class="panel" th:if="${element.kind().hasLogic()}">
+                <div class="panel-bar">
+                    <h3 th:text="${element.logic() == null} ? 'Decision logic' : ${element.logicName()}">Decision logic</h3>
+                    <span class="spacer"></span>
+                    <a th:if="${element.kind().name() == 'DECISION'}" class="tool"
+                       th:href="@{/models/{id}/evaluate(id=${modelId},decision=${element.id()})}">Evaluate</a>
+                    <a th:if="${editMode and element.logic() != null}" class="tool primary-tool"
+                       th:href="@{/models/{id}/elements/{e}/logic(id=${modelId},e=${element.id()})}">Edit logic</a>
+                </div>
+                <div class="expr-wrap">
+                    <th:block th:replace="~{fragments/expression :: expr(${element.logic()})}"></th:block>
+                </div>
+                <form th:if="${editMode}" method="post" th:action="@{/models/{id}/elements/{e}/logic/type(id=${modelId},e=${element.id()})}" class="actions top-gap">
+                    <label class="inline-label"><span th:text="${element.logic() == null} ? 'Create' : 'Replace with'">Create</span>
+                        <select name="type">
+                            <option th:each="t : ${logicTypes}" th:value="${t.name()}" th:text="${t.displayName()}"
+                                    th:selected="${t.name() == 'DECISION_TABLE'}">type</option>
+                        </select>
+                    </label>
+                    <button type="submit">Apply</button>
+                    <span class="hint" th:if="${element.logic() != null}">Replacing discards the current logic (Undo restores it).</span>
+                </form>
+            </section>
+        </div>
+
+        <div class="side-col">
+            <!--/* ---------- requirements ---------- */-->
+            <section class="panel">
+                <h3>Requires</h3>
+                <p class="empty" th:if="${element.requires().isEmpty()}">Nothing.</p>
+                <ul class="conn-list">
+                    <li th:each="c : ${element.requires()}">
+                        <span class="conn" th:classappend="${'conn-' + c.kind().slug()}" th:title="${c.kind().displayName()}"></span>
+                        <a th:if="${c.sourceLocal()}" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${c.sourceId()})}" th:text="${c.sourceName()}">x</a>
+                        <span th:unless="${c.sourceLocal()}" th:text="${c.sourceName()}" title="Imported element">x</span>
+                        <small class="muted" th:text="${c.kind().displayName()}">info</small>
+                        <form th:if="${editMode}" method="post" th:action="@{/models/{id}/connections/delete(id=${modelId})}" class="inline end">
+                            <input type="hidden" name="ref" th:value="${c.ref()}">
+                            <input type="hidden" name="back" th:value="${currentUri}">
+                            <button type="submit" class="icon danger" title="Remove requirement">✕</button>
+                        </form>
+                    </li>
+                </ul>
+                <form th:if="${editMode and !candidates.isEmpty()}" method="post" th:action="@{/models/{id}/connections(id=${modelId})}" class="row-form">
+                    <input type="hidden" name="target" th:value="${element.id()}">
+                    <input type="hidden" name="back" th:value="${currentUri}">
+                    <select name="source" aria-label="Element to require">
+                        <option th:each="c : ${candidates}" th:value="${c.id()}" th:text="${c.name() + ' (' + c.connection().displayName() + ')'}">x</option>
+                    </select>
+                    <button type="submit">Add</button>
+                </form>
+            </section>
+
+            <section class="panel">
+                <h3 th:text="${element.kind().name() == 'TEXT_ANNOTATION'} ? 'Associations' : 'Required by'">Required by</h3>
+                <p class="empty" th:if="${element.requiredBy().isEmpty()}">Nothing.</p>
+                <ul class="conn-list">
+                    <li th:each="c : ${element.requiredBy()}" th:with="other=${c.targetId() == element.id()} ? ${c.sourceId()} : ${c.targetId()}, otherName=${c.targetId() == element.id()} ? ${c.sourceName()} : ${c.targetName()}">
+                        <span class="conn" th:classappend="${'conn-' + c.kind().slug()}" th:title="${c.kind().displayName()}"></span>
+                        <a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${other})}" th:text="${otherName}">x</a>
+                        <small class="muted" th:text="${c.kind().displayName()}">info</small>
+                        <form th:if="${editMode}" method="post" th:action="@{/models/{id}/connections/delete(id=${modelId})}" class="inline end">
+                            <input type="hidden" name="ref" th:value="${c.ref()}">
+                            <input type="hidden" name="back" th:value="${currentUri}">
+                            <button type="submit" class="icon danger" title="Remove connection">✕</button>
+                        </form>
+                    </li>
+                </ul>
+                <form th:if="${editMode and !dependents.isEmpty()}" method="post" th:action="@{/models/{id}/connections(id=${modelId})}" class="row-form">
+                    <input type="hidden" name="source" th:value="${element.id()}">
+                    <input type="hidden" name="back" th:value="${currentUri}">
+                    <select name="target" aria-label="Element that requires this one">
+                        <option th:each="c : ${dependents}" th:value="${c.id()}" th:text="${c.name() + ' (' + c.connection().displayName() + ')'}">x</option>
+                    </select>
+                    <button type="submit">Add</button>
+                </form>
+            </section>
+
+            <!--/* ---------- layout ---------- */-->
+            <section class="panel" th:if="${editMode and info.dmndiSupported()}">
+                <h3>Layout</h3>
+                <p class="empty" th:if="${placements.isEmpty()}">Not placed on any diagram.</p>
+                <form th:each="p : ${placements}" method="post" class="layout-form"
+                      th:action="@{/models/{id}/elements/{e}/bounds(id=${modelId},e=${element.id()})}">
+                    <input type="hidden" name="drd" th:value="${p.diagram().id()}">
+                    <strong th:text="${p.diagram().name()}">DRD</strong>
+                    <div class="xywh">
+                        <label>x <input type="number" step="any" name="x" th:value="${p.bounds().x()}"></label>
+                        <label>y <input type="number" step="any" name="y" th:value="${p.bounds().y()}"></label>
+                        <label>w <input type="number" step="any" min="60" name="width" th:value="${p.bounds().width()}"></label>
+                        <label>h <input type="number" step="any" min="30" name="height" th:value="${p.bounds().height()}"></label>
+                    </div>
+                    <div class="actions">
+                        <button type="submit" class="small">Apply</button>
+                        <button type="submit" class="small" th:formaction="@{/models/{id}/diagram/remove(id=${modelId},elementId=${element.id()},drd=${p.diagram().id()})}">Remove from diagram</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel" th:if="${editMode}">
+                <h3>Danger zone</h3>
+                <form method="post" th:action="@{/models/{id}/elements/{e}/delete(id=${modelId},e=${element.id()})}">
+                    <p class="hint">Deletes the element, its requirements and its shapes.</p>
+                    <button type="submit" class="danger">Delete element</button>
+                </form>
+            </section>
+        </div>
+    </div>
+</main>
+</body>
+</html>

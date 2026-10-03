@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('drd')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <div class="model-layout" th:classappend="${editMode} ? 'with-side'">
+        <section class="panel canvas-panel">
+            <div class="panel-bar">
+                <nav class="drd-tabs" th:if="${diagrams.size() > 1}" aria-label="Diagrams">
+                    <a th:each="d : ${diagrams}" th:href="@{/models/{id}(id=${modelId},drd=${d.id()})}"
+                       th:classappend="${d.id() == diagram.diagramId()} ? 'active'" th:text="${d.name()}">DRD</a>
+                </nav>
+                <h2 th:if="${diagrams.size() <= 1}" th:text="${diagram.name()}">DRD</h2>
+                <span class="spacer"></span>
+                <a class="tool" th:if="${!actualSize}" th:href="@{/models/{id}(id=${modelId},drd=${diagram.diagramId()},actual=true)}">Actual size</a>
+                <a class="tool" th:if="${actualSize}" th:href="@{/models/{id}(id=${modelId},drd=${diagram.diagramId()})}">Fit to width</a>
+                <a class="tool" th:href="@{/models/{id}/diagram.svg(id=${modelId},drd=${diagram.diagramId()})}" target="_blank">SVG</a>
+                <form th:if="${editMode and info.dmndiSupported()}" method="post" th:action="@{/models/{id}/diagram/layout(id=${modelId})}" class="inline">
+                    <input type="hidden" name="drd" th:value="${diagram.diagramId()}">
+                    <button class="tool" type="submit" title="Arrange all shapes automatically">Auto-layout</button>
+                </form>
+            </div>
+            <p class="note" th:if="${!diagram.fromDmndi() and !diagram.isEmpty()}">
+                This model has no diagram interchange (DMNDI); the diagram is laid out automatically.
+                <th:block th:if="${editMode and info.dmndiSupported()}">Moving a shape stores the layout in the model.</th:block>
+            </p>
+            <div class="canvas" th:classappend="${actualSize} ? 'actual'">
+                <svg th:replace="~{fragments/drd :: drd(${diagram}, ${editMode and info.dmndiSupported()})}"></svg>
+                <p class="empty" th:if="${diagram.isEmpty()}">This diagram is empty.
+                    <th:block th:if="${editMode}">Add an element using the panel on the right.</th:block>
+                    <th:block th:unless="${editMode}">Switch to <strong>Edit</strong> mode to add elements.</th:block>
+                </p>
+            </div>
+            <div class="legend">
+                <span><svg width="34" height="10" aria-hidden="true"><line x1="0" y1="5" x2="26" y2="5" class="lg-line"/><path d="M24 0 L34 5 L24 10Z" class="lg-fill"/></svg> Information requirement</span>
+                <span><svg width="34" height="12" aria-hidden="true"><line x1="0" y1="6" x2="32" y2="6" class="lg-line dashed"/><path d="M24 1 L33 6 L24 11" class="lg-open"/></svg> Knowledge requirement</span>
+                <span><svg width="34" height="10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5" class="lg-line dashed"/><circle cx="29" cy="5" r="4.5" class="lg-fill"/></svg> Authority requirement</span>
+                <span><svg width="34" height="10" aria-hidden="true"><line x1="0" y1="5" x2="34" y2="5" class="lg-line dotted"/></svg> Association</span>
+                <span th:if="${editMode and info.dmndiSupported()}" class="hint">Drag a shape to move it · <kbd>Shift</kbd>+drag from one shape to another to connect them</span>
+            </div>
+        </section>
+
+        <aside class="side" th:if="${editMode}">
+            <section class="panel">
+                <h2>Add element</h2>
+                <form method="post" th:action="@{/models/{id}/elements(id=${modelId})}" class="stack">
+                    <input type="hidden" name="drd" th:value="${diagram.diagramId()}">
+                    <label>Kind
+                        <select name="kind">
+                            <option th:each="k : ${kinds}" th:value="${k.name()}" th:text="${k.displayName()}">Decision</option>
+                        </select>
+                    </label>
+                    <label>Name / text <input name="name" required placeholder="e.g. Eligibility"></label>
+                    <button type="submit" class="primary">Add</button>
+                </form>
+            </section>
+
+            <section class="panel" th:if="${elements.size() > 1}">
+                <h2>Connect</h2>
+                <form method="post" th:action="@{/models/{id}/connections(id=${modelId})}" class="stack">
+                    <input type="hidden" name="drd" th:value="${diagram.diagramId()}">
+                    <label>From (required element)
+                        <select name="source">
+                            <option th:each="e : ${elements}" th:value="${e.id()}" th:text="${e.displayName() + ' · ' + e.kind().displayName()}">x</option>
+                        </select>
+                    </label>
+                    <label>To (requiring element)
+                        <select name="target">
+                            <option th:each="e : ${elements}" th:value="${e.id()}" th:text="${e.displayName() + ' · ' + e.kind().displayName()}">x</option>
+                        </select>
+                    </label>
+                    <p class="hint">The requirement kind follows the DMN rules for the two element kinds.</p>
+                    <button type="submit">Connect</button>
+                </form>
+            </section>
+
+            <section class="panel" th:if="${!offDiagram.isEmpty() and info.dmndiSupported() and diagram.fromDmndi()}">
+                <h2>Not on this diagram</h2>
+                <ul class="plain">
+                    <li th:each="e : ${offDiagram}" class="row-between">
+                        <a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${e.id()})}" th:text="${e.displayName()}">x</a>
+                        <form method="post" th:action="@{/models/{id}/diagram/add(id=${modelId})}" class="inline">
+                            <input type="hidden" name="drd" th:value="${diagram.diagramId()}">
+                            <input type="hidden" name="elementId" th:value="${e.id()}">
+                            <button type="submit" class="small">Place</button>
+                        </form>
+                    </li>
+                </ul>
+            </section>
+
+            <section class="panel">
+                <h2>Model properties</h2>
+                <form method="post" th:action="@{/models/{id}/definitions(id=${modelId})}" class="stack">
+                    <label>Name <input name="name" th:value="${info.name()}" required></label>
+                    <label>Namespace <input name="namespace" th:value="${info.namespace()}" required></label>
+                    <label>Description <textarea name="description" rows="3" th:text="${info.description()}"></textarea></label>
+                    <button type="submit">Save</button>
+                </form>
+                <form th:if="${!info.latest()}" method="post" th:action="@{/models/{id}/convert(id=${modelId})}" class="stack top-gap">
+                    <p class="hint" th:text="${'This model uses DMN ' + info.version() + '. Converting rewrites the namespaces to DMN 1.5.'}"></p>
+                    <button type="submit">Convert to DMN 1.5</button>
+                </form>
+                <form method="post" th:action="@{/models/{id}/delete(id=${modelId})}" class="stack top-gap"
+                      onsubmit="return confirm('Delete this model permanently?');">
+                    <button type="submit" class="danger">Delete model</button>
+                </form>
+            </section>
+        </aside>
+    </div>
+
+    <section class="panel">
+        <h2>Elements</h2>
+        <p class="empty" th:if="${elements.isEmpty()}">No elements.</p>
+        <div class="table-wrap" th:unless="${elements.isEmpty()}">
+            <table class="list">
+                <thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Logic</th><th>Requires</th></tr></thead>
+                <tbody>
+                <tr th:each="e : ${elements}">
+                    <td><a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${e.id()})}" th:text="${e.displayName()}">x</a>
+                        <span class="off" th:if="${diagram.fromDmndi() and offDiagram.contains(e)}" title="Not shown on this diagram">hidden</span></td>
+                    <td><span class="kind" th:classappend="${'kind-' + e.kind().slug()}" th:text="${e.kind().displayName()}">Decision</span></td>
+                    <td><code th:if="${e.typeRef() != null}" th:text="${e.typeRef()}">string</code></td>
+                    <td th:text="${e.logicName()}">Decision table</td>
+                    <td>
+                        <th:block th:each="c, s : ${e.requires()}"><a th:if="${c.sourceLocal()}" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${c.sourceId()})}" th:text="${c.sourceName()}">x</a><span th:unless="${c.sourceLocal()}" th:text="${c.sourceName()}"></span><th:block th:unless="${s.last}">, </th:block></th:block>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" th:if="${!imports.isEmpty()}">
+        <h2>Imports</h2>
+        <table class="list">
+            <thead><tr><th>Name</th><th>Namespace</th><th>Location</th><th>Type</th></tr></thead>
+            <tbody>
+            <tr th:each="i : ${imports}">
+                <td th:text="${i.name()}">x</td><td><code th:text="${i.namespace()}">ns</code></td>
+                <td th:text="${i.locationUri()}">loc</td><td th:text="${i.importType()}">type</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+<script th:if="${editMode and info.dmndiSupported()}" th:src="@{/js/drd.js}" defer></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DMN 1.3 sample without DMNDI: the viewer lays the diagram out automatically. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="Definitions_Dish" name="Dish Selection"
+             namespace="https://dmnspwn.dev/dmn/dish-selection">
+
+  <itemDefinition name="tSeason">
+    <typeRef>string</typeRef>
+    <allowedValues><text>"Spring","Summer","Fall","Winter"</text></allowedValues>
+  </itemDefinition>
+
+  <inputData id="Season" name="Season">
+    <variable name="Season" typeRef="tSeason"/>
+  </inputData>
+  <inputData id="Guest_Count" name="Guest Count">
+    <variable name="Guest Count" typeRef="number"/>
+  </inputData>
+  <inputData id="Guests_With_Children" name="Guests with children?">
+    <variable name="Guests with children?" typeRef="boolean"/>
+  </inputData>
+
+  <businessKnowledgeModel id="Categorize_Party" name="Categorize Party">
+    <variable name="Categorize Party"/>
+    <encapsulatedLogic kind="FEEL">
+      <formalParameter name="count" typeRef="number"/>
+      <literalExpression typeRef="string">
+        <text>if count &lt;= 4 then "small" else if count &lt;= 12 then "medium" else "large"</text>
+      </literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+
+  <decision id="Party_Size" name="Party Size">
+    <variable name="Party Size" typeRef="string"/>
+    <informationRequirement><requiredInput href="#Guest_Count"/></informationRequirement>
+    <knowledgeRequirement><requiredKnowledge href="#Categorize_Party"/></knowledgeRequirement>
+    <invocation typeRef="string">
+      <literalExpression><text>Categorize Party</text></literalExpression>
+      <binding>
+        <parameter name="count" typeRef="number"/>
+        <literalExpression><text>Guest Count</text></literalExpression>
+      </binding>
+    </invocation>
+  </decision>
+
+  <decision id="Dish" name="Dish">
+    <variable name="Dish" typeRef="string"/>
+    <informationRequirement><requiredInput href="#Season"/></informationRequirement>
+    <informationRequirement><requiredDecision href="#Party_Size"/></informationRequirement>
+    <decisionTable hitPolicy="UNIQUE">
+      <input label="Season">
+        <inputExpression typeRef="tSeason"><text>Season</text></inputExpression>
+      </input>
+      <input label="Party Size">
+        <inputExpression typeRef="string"><text>Party Size</text></inputExpression>
+        <inputValues><text>"small","medium","large"</text></inputValues>
+      </input>
+      <output name="Dish" typeRef="string"/>
+      <rule><inputEntry><text>"Fall"</text></inputEntry><inputEntry><text>"small","medium"</text></inputEntry><outputEntry><text>"Spareribs"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Winter"</text></inputEntry><inputEntry><text>"small","medium"</text></inputEntry><outputEntry><text>"Roastbeef"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Spring"</text></inputEntry><inputEntry><text>"small"</text></inputEntry><outputEntry><text>"Dry Aged Gourmet Steak"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Spring"</text></inputEntry><inputEntry><text>"medium"</text></inputEntry><outputEntry><text>"Steak"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Fall","Winter","Spring"</text></inputEntry><inputEntry><text>"large"</text></inputEntry><outputEntry><text>"Stew"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Summer"</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Light Salad and a nice Steak"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="Beverages" name="Beverages">
+    <variable name="Beverages" typeRef="string"/>
+    <informationRequirement><requiredDecision href="#Dish"/></informationRequirement>
+    <informationRequirement><requiredInput href="#Guests_With_Children"/></informationRequirement>
+    <decisionTable hitPolicy="COLLECT">
+      <input label="Dish"><inputExpression typeRef="string"><text>Dish</text></inputExpression></input>
+      <input label="Guests with children?"><inputExpression typeRef="boolean"><text>Guests with children?</text></inputExpression></input>
+      <output name="Beverages" typeRef="string"/>
+      <rule><inputEntry><text>"Spareribs"</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Aecht Schlenkerla Rauchbier"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Stew"</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Guiness"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Roastbeef"</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Bordeaux"</text></outputEntry></rule>
+      <rule><inputEntry><text>"Steak","Dry Aged Gourmet Steak","Light Salad and a nice Steak"</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Pinot Noir"</text></outputEntry></rule>
+      <rule><inputEntry><text>-</text></inputEntry><inputEntry><text>true</text></inputEntry><outputEntry><text>"Apple Juice"</text></outputEntry></rule>
+      <rule><inputEntry><text>-</text></inputEntry><inputEntry><text>-</text></inputEntry><outputEntry><text>"Water"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="Seasonal_Menu" name="Seasonal Menu">
+    <variable name="Seasonal Menu"/>
+    <relation>
+      <column name="season" typeRef="string"/>
+      <column name="special" typeRef="string"/>
+      <column name="price" typeRef="number"/>
+      <row><literalExpression><text>"Spring"</text></literalExpression><literalExpression><text>"Asparagus"</text></literalExpression><literalExpression><text>18.5</text></literalExpression></row>
+      <row><literalExpression><text>"Summer"</text></literalExpression><literalExpression><text>"Gazpacho"</text></literalExpression><literalExpression><text>12</text></literalExpression></row>
+      <row><literalExpression><text>"Fall"</text></literalExpression><literalExpression><text>"Pumpkin soup"</text></literalExpression><literalExpression><text>11</text></literalExpression></row>
+      <row><literalExpression><text>"Winter"</text></literalExpression><literalExpression><text>"Goulash"</text></literalExpression><literalExpression><text>16</text></literalExpression></row>
+    </relation>
+  </decision>
+</definitions>

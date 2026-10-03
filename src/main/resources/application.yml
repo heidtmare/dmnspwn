@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: dmnspwn
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8080
+  servlet:
+    session:
+      tracking-modes: cookie
+  tomcat:
+    # Large decision tables are posted as one form.
+    max-parameter-count: 20000
+
+dmnspwn:
+  storage-directory: ./dmn-models
+  seed-samples: true
+  history-size: 50
+  # Optional S3 bucket for loading and publishing models. Credentials come from the AWS SDK
+  # default provider chain (AWS_* env vars, ~/.aws profiles/SSO, container or instance roles).
+  s3:
+    enabled: false
+    bucket:
+    prefix: dmn/
+    region:            # e.g. eu-west-1; empty = SDK default region chain
+    endpoint:          # e.g. http://localhost:9000 for MinIO / LocalStack
+    path-style: false  # true for most S3-compatible stores
+    max-object-size: 10MB
+    timeout: 30s

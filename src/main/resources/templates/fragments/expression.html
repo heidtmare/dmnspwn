@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!--/* Recursive boxed-expression renderer (DMN chapter 7). */-->
+<th:block th:fragment="expr(x)">
+    <div th:if="${x == null}" class="bx-empty">No expression</div>
+    <th:block th:if="${x != null}">
+        <th:block th:switch="${x.type()}">
+
+            <th:block th:case="'literal'">
+                <div class="bx bx-literal"><pre class="feel" th:text="${x.text()}">expression</pre></div>
+            </th:block>
+
+            <th:block th:case="'decisionTable'">
+                <table th:replace="~{fragments/expression :: decisionTable(${x})}"></table>
+            </th:block>
+
+            <th:block th:case="'context'">
+                <table class="bx bx-grid">
+                    <tr th:each="en : ${x.entries()}">
+                        <th th:if="${en.name() != null}" class="bx-name">
+                            <span th:text="${en.name()}">name</span>
+                            <small th:if="${en.typeRef() != null}" th:text="${en.typeRef()}">type</small>
+                        </th>
+                        <th th:if="${en.name() == null}" class="bx-name bx-result">result</th>
+                        <td><th:block th:replace="~{fragments/expression :: expr(${en.value()})}"></th:block></td>
+                    </tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'relation'">
+                <table class="bx bx-grid bx-relation">
+                    <thead>
+                    <tr>
+                        <th class="bx-idx">#</th>
+                        <th th:each="c : ${x.columns()}">
+                            <span th:text="${c.name()}">column</span>
+                            <small th:if="${c.typeRef() != null}" th:text="${c.typeRef()}">type</small>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="row, s : ${x.rows()}">
+                        <td class="bx-idx" th:text="${s.count}">1</td>
+                        <td th:each="cell : ${row}"><th:block th:replace="~{fragments/expression :: expr(${cell})}"></th:block></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </th:block>
+
+            <th:block th:case="'list'">
+                <table class="bx bx-grid">
+                    <tr th:each="item, s : ${x.items()}">
+                        <td class="bx-idx" th:text="${s.count}">1</td>
+                        <td><th:block th:replace="~{fragments/expression :: expr(${item})}"></th:block></td>
+                    </tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'invocation'">
+                <table class="bx bx-grid">
+                    <tr><th colspan="2" class="bx-head"><code th:text="${x.function()}">fn</code></th></tr>
+                    <tr th:each="b : ${x.bindings()}">
+                        <th class="bx-name"><span th:text="${b.name()}">param</span>
+                            <small th:if="${b.typeRef() != null}" th:text="${b.typeRef()}">type</small></th>
+                        <td><th:block th:replace="~{fragments/expression :: expr(${b.value()})}"></th:block></td>
+                    </tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'function'">
+                <table class="bx bx-grid">
+                    <tr>
+                        <th class="bx-kind" th:text="${x.kindCode()}" th:title="${x.kind() ?: 'FEEL'}">F</th>
+                        <th class="bx-head">(<th:block th:each="p, s : ${x.parameters()}"><span th:text="${p.name()}">p</span><small th:if="${p.typeRef() != null}" th:text="${': ' + p.typeRef()}"></small><th:block th:unless="${s.last}">, </th:block></th:block>)</th>
+                    </tr>
+                    <tr><td colspan="2"><th:block th:replace="~{fragments/expression :: expr(${x.body()})}"></th:block></td></tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'conditional'">
+                <table class="bx bx-grid">
+                    <tr><th class="bx-name">if</th><td><th:block th:replace="~{fragments/expression :: expr(${x.condition()})}"></th:block></td></tr>
+                    <tr><th class="bx-name">then</th><td><th:block th:replace="~{fragments/expression :: expr(${x.then()})}"></th:block></td></tr>
+                    <tr><th class="bx-name">else</th><td><th:block th:replace="~{fragments/expression :: expr(${x.otherwise()})}"></th:block></td></tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'iterator'">
+                <table class="bx bx-grid">
+                    <tr><th class="bx-name" th:text="${x.keyword()}">for</th><td><code th:text="${x.variable()}">item</code></td></tr>
+                    <tr><th class="bx-name">in</th><td><th:block th:replace="~{fragments/expression :: expr(${x.collection()})}"></th:block></td></tr>
+                    <tr><th class="bx-name" th:text="${x.bodyKeyword()}">return</th><td><th:block th:replace="~{fragments/expression :: expr(${x.body()})}"></th:block></td></tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="'filter'">
+                <table class="bx bx-grid">
+                    <tr><td><th:block th:replace="~{fragments/expression :: expr(${x.collection()})}"></th:block></td></tr>
+                    <tr><td><span class="bx-bracket">[</span><th:block th:replace="~{fragments/expression :: expr(${x.match()})}"></th:block><span class="bx-bracket">]</span></td></tr>
+                </table>
+            </th:block>
+
+            <th:block th:case="*">
+                <div class="bx bx-unknown">
+                    <div class="bx-head" th:text="${x.displayName()}">expression</div>
+                    <pre class="code" th:text="${x.xml()}">xml</pre>
+                </div>
+            </th:block>
+        </th:block>
+    </th:block>
+</th:block>
+
+<!--/* Decision table in the standard (rules-as-rows) orientation. */-->
+<table th:fragment="decisionTable(t)" class="dt">
+    <thead>
+    <tr>
+        <th class="dt-hp" rowspan="2" th:title="${'Hit policy: ' + t.hitPolicyLabel()}" th:text="${t.hitPolicyCode()}">U</th>
+        <th th:each="ic : ${t.inputs()}" class="dt-in" th:text="${ic.heading()}">input</th>
+        <th th:each="out, s : ${t.outputs()}" class="dt-out" th:classappend="${s.first} ? 'dt-sep'"
+            th:text="${out.heading() ?: (t.outputLabel() ?: 'Output')}">output</th>
+        <th th:each="a, s : ${t.annotations()}" class="dt-ann" th:classappend="${s.first} ? 'dt-sep'" th:text="${a}">annotation</th>
+    </tr>
+    <tr class="dt-meta">
+        <td th:each="ic : ${t.inputs()}">
+            <code th:if="${ic.label() != null and !ic.label().isBlank()}" th:text="${ic.expression()}" class="expr">expr</code>
+            <span th:if="${ic.typeRef() != null}" class="type" th:text="${ic.typeRef()}">type</span>
+            <span th:if="${ic.inputValues() != null}" class="values" th:text="${ic.inputValues()}">values</span>
+        </td>
+        <td th:each="out, s : ${t.outputs()}" th:classappend="${s.first} ? 'dt-sep'">
+            <span th:if="${out.typeRef() != null}" class="type" th:text="${out.typeRef()}">type</span>
+            <span th:if="${out.outputValues() != null}" class="values" th:text="${out.outputValues()}">values</span>
+            <span th:if="${out.defaultOutput() != null}" class="values" th:text="${'default: ' + out.defaultOutput()}">default</span>
+        </td>
+        <td th:each="a, s : ${t.annotations()}" th:classappend="${s.first} ? 'dt-sep'"></td>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="r, s : ${t.rules()}" th:title="${r.description()}"
+        th:classappend="${hits != null and hits.contains(s.count)} ? 'dt-hit'">
+        <td class="dt-idx" th:text="${s.count}">1</td>
+        <td th:each="v : ${r.inputs()}" class="feel" th:text="${v}">-</td>
+        <td th:each="v, s2 : ${r.outputs()}" class="feel" th:classappend="${s2.first} ? 'dt-sep'" th:text="${v}">out</td>
+        <td th:each="v, s2 : ${r.annotations()}" class="dt-ann" th:classappend="${s2.first} ? 'dt-sep'" th:text="${v}">note</td>
+    </tr>
+    <tr th:if="${t.rules().isEmpty()}">
+        <td class="dt-empty" th:attr="colspan=${1 + t.inputs().size() + t.outputs().size() + t.annotations().size()}">No rules</td>
+    </tr>
+    </tbody>
+</table>
+
+</body>
+</html>

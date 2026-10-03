@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('S3 · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('s3')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <div class="split">
+        <section class="panel">
+            <h2>Link</h2>
+            <p class="empty" th:if="${status.link() == null}">This model is not linked to an S3 object yet. Publishing links it.</p>
+            <th:block th:if="${status.link() != null}">
+                <dl class="props">
+                    <dt>Object</dt><dd><code th:text="'s3://' + ${bucket} + '/' + ${status.link().key()}">key</code></dd>
+                    <dt>Last sync</dt><dd th:text="${status.link().syncedText()}">time</dd>
+                    <dt>ETag</dt><dd><code th:text="${status.link().etag() ?: '—'}">etag</code></dd>
+                    <dt>Local</dt>
+                    <dd>
+                        <span th:if="${status.localChanged()}" class="state warn">Changed since last sync</span>
+                        <span th:unless="${status.localChanged()}" class="state ok">Unchanged since last sync</span>
+                    </dd>
+                    <dt>S3</dt>
+                    <dd th:switch="${status.remote().name()}">
+                        <span th:case="'IN_SYNC'" class="state ok">Unchanged since last sync</span>
+                        <span th:case="'CHANGED'" class="state warn">Changed by someone else</span>
+                        <span th:case="'MISSING'" class="state err">Object no longer exists</span>
+                        <span th:case="*" class="state muted" th:text="${status.remoteError() ?: 'Unknown'}">Unknown</span>
+                    </dd>
+                </dl>
+                <div class="actions top-gap">
+                    <form th:if="${status.localChanged()}" method="post" th:action="@{/models/{id}/s3/pull(id=${modelId})}" class="inline"
+                          onsubmit="return confirm('Discard the local changes and replace them with the S3 version?');">
+                        <button type="submit" th:disabled="${status.remote().name() == 'MISSING'}">Pull from S3</button>
+                    </form>
+                    <form th:unless="${status.localChanged()}" method="post" th:action="@{/models/{id}/s3/pull(id=${modelId})}" class="inline">
+                        <button type="submit" th:disabled="${status.remote().name() == 'MISSING'}">Pull from S3</button>
+                    </form>
+                    <form method="post" th:action="@{/models/{id}/s3/unlink(id=${modelId})}" class="inline">
+                        <button type="submit">Unlink</button>
+                    </form>
+                </div>
+                <p class="hint">Pulling replaces the local model; Undo restores the previous local version.</p>
+            </th:block>
+        </section>
+
+        <section class="panel">
+            <h2>Publish</h2>
+            <p class="flash err" th:if="${errorCount > 0}"
+               th:text="${'This model has ' + errorCount + ' validation error(s). It can still be published.'}">errors</p>
+            <form method="post" th:action="@{/models/{id}/s3/publish(id=${modelId})}" class="stack">
+                <label>Object key <input name="key" th:value="${defaultKey}" required></label>
+                <p class="hint" th:text="${'Keys must start with ' + (root.isEmpty() ? '(any prefix)' : root) + ' and end with .dmn or .xml. The write fails instead of overwriting an object that changed in S3 (or already exists, for a new key).'}">hint</p>
+                <div class="actions"><button type="submit" class="primary">Publish</button></div>
+            </form>
+            <form th:if="${conflictKey != null}" method="post" th:action="@{/models/{id}/s3/publish(id=${modelId})}" class="conflict stack">
+                <input type="hidden" name="key" th:value="${conflictKey}">
+                <input type="hidden" name="force" value="true">
+                <p>Overwrite <code th:text="${conflictKey}">key</code> anyway? The version in S3 will be replaced.
+                    Use <strong>Pull from S3</strong> first if you want to keep it.</p>
+                <div class="actions"><button type="submit" class="danger">Overwrite in S3</button></div>
+            </form>
+        </section>
+    </div>
+</main>
+</body>
+</html>
