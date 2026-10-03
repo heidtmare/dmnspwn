@@ -1,5 +1,6 @@
 package heidtmare.dmnspwn.eval;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,6 +28,11 @@ public final class Scope implements Context {
 
         /** The value of {@code name}, or {@code null} when it is unknown. */
         Val resolve(String name);
+
+        /** Names whose value is a function, known without resolving them. */
+        default Set<String> functionNames() {
+            return Set.of();
+        }
     }
 
     private final Scope parent;
@@ -95,6 +101,28 @@ public final class Scope implements Context {
         return names;
     }
 
+    /** Visible names bound to functions; unresolved names are only asked about, never evaluated. */
+    private Set<String> functionNames() {
+        Set<String> seen = new HashSet<>();
+        Set<String> functions = new LinkedHashSet<>();
+        for (Scope s = this; s != null; s = s.parent) {
+            s.variables.forEach((name, value) -> {
+                if (seen.add(name) && value instanceof ValFunction) {
+                    functions.add(name);
+                }
+            });
+            if (s.resolver != null) {
+                Set<String> resolvable = s.resolver.functionNames();
+                for (String name : s.resolver.names()) {
+                    if (seen.add(name) && resolvable.contains(name)) {
+                        functions.add(name);
+                    }
+                }
+            }
+        }
+        return functions;
+    }
+
     // ---- FEEL engine context -------------------------------------------------------------------
 
     @Override
@@ -123,8 +151,7 @@ public final class Scope implements Context {
 
             @Override
             public scala.collection.Iterable<String> functionNames() {
-                return CollectionConverters.asScala(
-                        names().stream().filter(n -> get(n) instanceof ValFunction).toList());
+                return CollectionConverters.asScala(Scope.this.functionNames());
             }
         };
     }

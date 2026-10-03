@@ -1,6 +1,7 @@
 package heidtmare.dmnspwn;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
@@ -15,18 +16,26 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
 import org.w3c.dom.Element;
+import org.camunda.feel.syntaxtree.Val;
 import org.w3c.dom.NodeList;
 
 import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditor;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
+import heidtmare.dmnspwn.eval.Evaluation;
 import heidtmare.dmnspwn.eval.Feel;
+import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.eval.Scope;
 import heidtmare.dmnspwn.eval.Values;
 import heidtmare.dmnspwn.model.ConnectionKind;
@@ -37,8 +46,14 @@ import heidtmare.dmnspwn.store.ModelRepository;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.store.ModelSummary;
 import heidtmare.dmnspwn.xml.DmnDocument;
+import heidtmare.dmnspwn.xml.DmnFormatException;
+import heidtmare.dmnspwn.xml.DmnXml;
+import scala.jdk.javaapi.CollectionConverters;
 
-/** Guards against repeated work: id generation, element views, FEEL parsing and the model listing. */
+/**
+ * Guards against repeated work: id generation, element views, FEEL parsing, the model listing, XML factories and
+ * evaluation bookkeeping.
+ */
 class PerformanceTest {
 
     @TempDir
@@ -144,5 +159,65 @@ class PerformanceTest {
 
     private static ModelSummary summary(ModelService models, String id) {
         return models.list().stream().filter(m -> m.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    @Test
+    void reusesXmlParsersSafelyAcrossThreadsAndFailures() throws Exception {
+        String loan = TestModels.xml("loan-eligibility");
+        String expected = DmnDocument.parse(loan).toXml();
+        // A failed parse must leave the thread's parser usable and still strict.
+        assertThatThrownBy(() -> DmnXml.parse("<definitions")).isInstanceOf(DmnFormatException.class);
+        assertThat(DmnDocument.parse(loan).toXml()).isEqualTo(expected);
+        assertThatThrownBy(() -> DmnXml.parse("<a></b>")).isInstanceOf(DmnFormatException.class);
+
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<String>> results = new ArrayList<>();
+            for (int i = 0; i < 64; i++) {
+                results.add(pool.submit(() -> DmnDocument.parse(loan).toXml()));
+            }
+            for (Future<String> f : results) {
+                assertThat(f.get()).isEqualTo(expected);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void listsFunctionNamesWithoutEvaluatingAnything() {
+        AtomicInteger resolved = new AtomicInteger();
+        Scope root = Scope.root(Feel.QuotedNames.of(List.of()), new Scope.Resolver() {
+            @Override
+            public Set<String> names() {
+                return Set.of("decision", "bkm", "shadowed");
+            }
+
+            @Override
+            public Val resolve(String name) {
+                resolved.incrementAndGet();
+                return Values.number(1);
+            }
+
+            @Override
+            public Set<String> functionNames() {
+                return Set.of("bkm", "shadowed");
+            }
+        });
+        Scope inner = root.child().put("shadowed", Values.number(2));
+
+        assertThat(CollectionConverters.asJava(inner.functionProvider().functionNames())).containsExactly("bkm");
+        assertThat(resolved).hasValue(0);
+    }
+
+    @Test
+    void evaluatorComputesFormDataOnceAndKeepsMessagePrefixes() {
+        ModelEvaluator evaluator = new ModelEvaluator(new DmnReader(TestModels.loan()), new Feel());
+        assertThat(evaluator.inputFields()).isSameAs(evaluator.inputFields());
+        assertThat(evaluator.decisions()).isSameAs(evaluator.decisions());
+
+        Evaluation e = evaluator.evaluate(Map.of(), List.of("Risk_Category"), null);
+        assertThat(e.decisions()).filteredOn(d -> d.id().equals("Risk_Category")).singleElement()
+                .satisfies(d -> assertThat(d.messages()).anyMatch(m -> m.text().startsWith("Rule ")));
     }
 }

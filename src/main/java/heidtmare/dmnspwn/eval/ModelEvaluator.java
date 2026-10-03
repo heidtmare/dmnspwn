@@ -46,23 +46,29 @@ public final class ModelEvaluator {
     private final Map<String, ElementView> elements = new LinkedHashMap<>();
     private final Map<String, ItemDefinitionView> types = new HashMap<>();
     private final Feel.QuotedNames quotedNames;
+    private final List<ElementView> decisions;
+    private List<InputField> inputFields;
 
     public ModelEvaluator(DmnReader reader, Feel feel) {
         this.feel = feel;
         reader.elements().forEach(e -> elements.put(e.id(), e));
         reader.itemDefinitions().forEach(t -> types.putIfAbsent(t.name(), t));
         this.quotedNames = Feel.QuotedNames.of(names(reader));
+        this.decisions = elements.values().stream().filter(e -> e.kind() == ElementKind.DECISION).toList();
     }
 
     public List<ElementView> decisions() {
-        return elements.values().stream().filter(e -> e.kind() == ElementKind.DECISION).toList();
+        return decisions;
     }
 
     public List<InputField> inputFields() {
-        return elements.values().stream().filter(e -> e.kind() == ElementKind.INPUT_DATA)
-                .map(e -> new InputField(e.id(), e.name(), e.typeRef(), placeholder(e.typeRef()),
-                        suggestions(e.typeRef())))
-                .toList();
+        if (inputFields == null) {
+            inputFields = elements.values().stream().filter(e -> e.kind() == ElementKind.INPUT_DATA)
+                    .map(e -> new InputField(e.id(), e.name(), e.typeRef(), placeholder(e.typeRef()),
+                            suggestions(e.typeRef())))
+                    .toList();
+        }
+        return inputFields;
     }
 
     /**
@@ -276,6 +282,17 @@ public final class ModelEvaluator {
                 @Override
                 public Set<String> names() {
                     return byName.keySet();
+                }
+
+                @Override
+                public Set<String> functionNames() {
+                    Set<String> functions = new HashSet<>();
+                    byName.forEach((name, e) -> {
+                        if (e.kind() == ElementKind.BUSINESS_KNOWLEDGE_MODEL || e.kind() == ElementKind.DECISION_SERVICE) {
+                            functions.add(name);
+                        }
+                    });
+                    return functions;
                 }
 
                 @Override

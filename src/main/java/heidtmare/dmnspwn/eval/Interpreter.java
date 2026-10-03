@@ -73,15 +73,18 @@ final class Interpreter {
     }
 
     /** Evaluates FEEL text; blank text is {@code null}. {@code where} prefixes messages when given. */
-    Val feel(String text, Scope scope, String where) {
+    Val feel(String text, Scope scope, Supplier<String> where) {
         if (text == null || text.isBlank()) {
             return Values.NULL;
         }
         return report(feel.evaluate(text, scope), where);
     }
 
-    private Val report(Feel.Result result, String where) {
-        String prefix = where == null ? "" : where + ": ";
+    private Val report(Feel.Result result, Supplier<String> where) {
+        if (!result.failed() && result.warnings().isEmpty()) {
+            return result.value();
+        }
+        String prefix = where == null ? "" : where.get() + ": ";
         if (result.failed()) {
             trace.get().error(prefix + result.error());
         }
@@ -99,7 +102,8 @@ final class Interpreter {
     private Val decisionTable(DecisionTable t, Scope scope) {
         List<Val> inputs = new ArrayList<>();
         for (int i = 0; i < t.inputs().size(); i++) {
-            inputs.add(feel(t.inputs().get(i).expression(), scope, "Input " + (i + 1)));
+            int n = i + 1;
+            inputs.add(feel(t.inputs().get(i).expression(), scope, () -> "Input " + n));
         }
 
         List<Hit> hits = new ArrayList<>();
@@ -109,7 +113,9 @@ final class Interpreter {
                 List<Val> outputs = new ArrayList<>();
                 for (int o = 0; o < t.outputs().size(); o++) {
                     String entry = o < rule.outputs().size() ? rule.outputs().get(o) : "";
-                    outputs.add(feel(entry, scope, "Rule " + (r + 1) + ", output " + (o + 1)));
+                    int rn = r + 1;
+                    int on = o + 1;
+                    outputs.add(feel(entry, scope, () -> "Rule " + rn + ", output " + on));
                 }
                 hits.add(new Hit(r + 1, combine(t, outputs), outputs));
             }
@@ -150,7 +156,8 @@ final class Interpreter {
             if (entry == null || entry.isBlank() || entry.strip().equals("-")) {
                 continue;
             }
-            Val result = report(feel.test(entry, inputs.get(i), scope), "Rule " + number + ", input " + (i + 1));
+            int in = i + 1;
+            Val result = report(feel.test(entry, inputs.get(i), scope), () -> "Rule " + number + ", input " + in);
             if (!Values.isTrue(result)) {
                 return false;
             }
@@ -177,7 +184,8 @@ final class Interpreter {
         }
         List<Val> outputs = new ArrayList<>();
         for (int o = 0; o < t.outputs().size(); o++) {
-            outputs.add(feel(t.outputs().get(o).defaultOutput(), scope, "Default output " + (o + 1)));
+            int on = o + 1;
+            outputs.add(feel(t.outputs().get(o).defaultOutput(), scope, () -> "Default output " + on));
         }
         return combine(t, outputs);
     }
@@ -191,7 +199,8 @@ final class Interpreter {
             if (values == null || values.isBlank()) {
                 priorities.add(List.of());
             } else {
-                priorities.add(Values.items(feel("[" + values + "]", scope, "Output values " + (o + 1))));
+                int on = o + 1;
+                priorities.add(Values.items(feel("[" + values + "]", scope, () -> "Output values " + on)));
             }
         }
         if (priorities.stream().allMatch(List::isEmpty)) {
@@ -245,7 +254,8 @@ final class Interpreter {
             trace.get().error("Unknown aggregation '" + aggregation + "'");
             return Values.NULL;
         }
-        return feel(function + "(outputs)", scope.child().put("outputs", Values.list(values)), "Aggregation " + aggregation);
+        return feel(function + "(outputs)", scope.child().put("outputs", Values.list(values)),
+                () -> "Aggregation " + aggregation);
     }
 
     private static String rules(List<Hit> hits) {
@@ -285,7 +295,7 @@ final class Interpreter {
             trace.get().error("Invocation without a function name");
             return Values.NULL;
         }
-        Val callee = feel(i.function(), scope, "Invoked function");
+        Val callee = feel(i.function(), scope, () -> "Invoked function");
         if (!(callee instanceof ValFunction function)) {
             trace.get().error("'" + i.function() + "' is not a function");
             return Values.NULL;

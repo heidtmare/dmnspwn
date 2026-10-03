@@ -30,6 +30,26 @@ public final class DmnXml {
 
     private static final String DECLARATION = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
+    private static final ErrorHandler STRICT = new ErrorHandler() {
+        @Override
+        public void warning(SAXParseException e) {
+        }
+
+        @Override
+        public void error(SAXParseException e) throws SAXException {
+            throw e;
+        }
+
+        @Override
+        public void fatalError(SAXParseException e) throws SAXException {
+            throw e;
+        }
+    };
+
+    /** Factories are costly to look up and not thread-safe, so each thread keeps its own builder and serializer. */
+    private static final ThreadLocal<DocumentBuilder> BUILDER = ThreadLocal.withInitial(DmnXml::newBuilder);
+    private static final ThreadLocal<Transformer> SERIALIZER = ThreadLocal.withInitial(DmnXml::newSerializer);
+
     private DmnXml() {
     }
 
@@ -37,40 +57,22 @@ public final class DmnXml {
         if (xml == null || xml.isBlank()) {
             throw new DmnFormatException("The document is empty");
         }
+        DocumentBuilder builder = BUILDER.get();
         try {
-            DocumentBuilder builder = factory().newDocumentBuilder();
-            builder.setErrorHandler(new ErrorHandler() {
-                @Override
-                public void warning(SAXParseException e) {
-                }
-
-                @Override
-                public void error(SAXParseException e) throws SAXException {
-                    throw e;
-                }
-
-                @Override
-                public void fatalError(SAXParseException e) throws SAXException {
-                    throw e;
-                }
-            });
             return builder.parse(new InputSource(new StringReader(stripBom(xml))));
         } catch (SAXParseException e) {
             throw new DmnFormatException("Malformed XML at line %d, column %d: %s"
                     .formatted(e.getLineNumber(), e.getColumnNumber(), e.getMessage()), e);
         } catch (SAXException | java.io.IOException e) {
             throw new DmnFormatException("Unable to read XML: " + e.getMessage(), e);
-        } catch (ParserConfigurationException e) {
-            throw new IllegalStateException(e);
+        } finally {
+            builder.reset();
+            builder.setErrorHandler(STRICT);
         }
     }
 
     public static Document newDocument() {
-        try {
-            return factory().newDocumentBuilder().newDocument();
-        } catch (ParserConfigurationException e) {
-            throw new IllegalStateException(e);
-        }
+        return BUILDER.get().newDocument();
     }
 
     /** Serializes a whole document with an XML declaration. */
@@ -86,6 +88,16 @@ public final class DmnXml {
     private static String write(Element element) {
         stripIndentation(element);
         try {
+            StringWriter out = new StringWriter();
+            SERIALIZER.get().transform(new DOMSource(element), new StreamResult(out));
+            return out.toString().strip() + "\n";
+        } catch (TransformerException e) {
+            throw new IllegalStateException("Unable to serialize XML", e);
+        }
+    }
+
+    private static Transformer newSerializer() {
+        try {
             TransformerFactory tf = TransformerFactory.newInstance();
             tf.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             tf.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
@@ -94,11 +106,19 @@ public final class DmnXml {
             t.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
             t.setOutputProperty(OutputKeys.INDENT, "yes");
             t.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-            StringWriter out = new StringWriter();
-            t.transform(new DOMSource(element), new StreamResult(out));
-            return out.toString().strip() + "\n";
+            return t;
         } catch (TransformerException e) {
-            throw new IllegalStateException("Unable to serialize XML", e);
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static DocumentBuilder newBuilder() {
+        try {
+            DocumentBuilder builder = factory().newDocumentBuilder();
+            builder.setErrorHandler(STRICT);
+            return builder;
+        } catch (ParserConfigurationException e) {
+            throw new IllegalStateException(e);
         }
     }
 
