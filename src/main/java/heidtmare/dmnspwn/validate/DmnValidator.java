@@ -122,37 +122,11 @@ public final class DmnValidator {
     }
 
     private static void checkCycles(DmnReader reader, Map<String, ElementView> elements, List<Issue> issues) {
-        Map<String, List<String>> requires = new HashMap<>();
-        for (ConnectionView c : reader.connections()) {
-            if (c.kind() != ConnectionKind.ASSOCIATION && c.sourceLocal()) {
-                requires.computeIfAbsent(c.targetId(), k -> new ArrayList<>()).add(c.sourceId());
-            }
+        for (String id : reader.requirementGraph().cycles(reader.elements().stream().map(ElementView::id).toList())) {
+            ElementView e = elements.get(id);
+            issues.add(new Issue(Severity.ERROR, id, e == null ? id : e.displayName(),
+                    "Requirement cycle involving this element"));
         }
-        Set<String> done = new HashSet<>();
-        Set<String> reported = new HashSet<>();
-        for (String id : elements.keySet()) {
-            visit(id, requires, new HashSet<>(), done, reported, elements, issues);
-        }
-    }
-
-    private static void visit(String id, Map<String, List<String>> requires, Set<String> path, Set<String> done,
-                              Set<String> reported, Map<String, ElementView> elements, List<Issue> issues) {
-        if (done.contains(id)) {
-            return;
-        }
-        if (!path.add(id)) {
-            if (reported.add(id)) {
-                ElementView e = elements.get(id);
-                issues.add(new Issue(Severity.ERROR, id, e == null ? id : e.displayName(),
-                        "Requirement cycle involving this element"));
-            }
-            return;
-        }
-        for (String next : requires.getOrDefault(id, List.of())) {
-            visit(next, requires, path, done, reported, elements, issues);
-        }
-        path.remove(id);
-        done.add(id);
     }
 
     private static void checkShapes(DmnDocument doc, DmnReader reader, List<Issue> issues) {

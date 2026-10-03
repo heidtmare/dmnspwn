@@ -27,11 +27,9 @@ import heidtmare.dmnspwn.xml.Href;
 /** Builds immutable view models from a {@link DmnDocument}. */
 public final class DmnReader {
 
-    private static final List<String> REQUIREMENTS =
-            List.of("informationRequirement", "knowledgeRequirement", "authorityRequirement");
-
     private final DmnDocument doc;
     private final Map<String, Element> nodes = new LinkedHashMap<>();
+    private List<ConnectionElement> connectionElements;
     private List<ConnectionView> connections;
     private Map<String, List<ConnectionView>> requiresByTarget;
     private Map<String, List<ConnectionView>> requiredByNode;
@@ -100,34 +98,32 @@ public final class DmnReader {
     }
 
     private List<ConnectionView> readConnections() {
-        String modelNs = doc.modelNamespace();
         List<ConnectionView> result = new ArrayList<>();
-        for (Element target : nodes.values()) {
-            for (Element req : doc.children(target)) {
-                if (!REQUIREMENTS.contains(req.getLocalName())) {
-                    continue;
-                }
-                Optional<Element> refEl = doc.children(req).stream().filter(c -> c.hasAttribute("href")).findFirst();
-                if (refEl.isEmpty()) {
-                    continue;
-                }
-                Href href = Href.parse(refEl.get().getAttribute("href"));
-                String id = req.getAttribute("id");
-                String ref = id.isEmpty()
-                        ? target.getAttribute("id") + "|" + req.getLocalName() + "|" + href.id()
-                        : id;
-                result.add(connection(ref, id, ConnectionKind.fromLocalName(req.getLocalName()).orElseThrow(),
-                        href, modelNs, target.getAttribute("id")));
+        for (ConnectionElement c : connectionElements()) {
+            if (c.source() == null) {
+                continue; // a requirement without a reference
             }
-        }
-        for (Element assoc : doc.children(doc.definitions(), "association")) {
-            Href src = Href.parse(doc.child(assoc, "sourceRef").map(e -> e.getAttribute("href")).orElse(""));
-            Href tgt = Href.parse(doc.child(assoc, "targetRef").map(e -> e.getAttribute("href")).orElse(""));
-            String id = assoc.getAttribute("id");
-            String ref = id.isEmpty() ? "association|" + src.id() + "|" + tgt.id() : id;
-            result.add(connection(ref, id, ConnectionKind.ASSOCIATION, src, modelNs, tgt.id()));
+            String sourceId = c.source().id();
+            String targetId = c.target().id();
+            Element src = c.sourceLocal() ? nodes.get(sourceId) : null;
+            Element tgt = nodes.get(targetId);
+            result.add(new ConnectionView(c.ref(), c.id(), c.kind(),
+                    sourceId, src == null ? sourceId : nameOf(sourceId), src == null ? null : kindOf(src),
+                    c.sourceLocal(), targetId, nameOf(targetId), tgt == null ? null : kindOf(tgt)));
         }
         return result;
+    }
+
+    /** The requirement and association elements behind {@link #connections()}. */
+    public List<ConnectionElement> connectionElements() {
+        if (connectionElements == null) {
+            connectionElements = ConnectionElement.all(doc);
+        }
+        return connectionElements;
+    }
+
+    public RequirementGraph requirementGraph() {
+        return new RequirementGraph(connectionElements());
     }
 
     /** Connections by the element that requires them, and by the elements they lead from (associations: both ends). */
@@ -151,17 +147,6 @@ public final class DmnReader {
         requiredBy.replaceAll((k, v) -> List.copyOf(v));
         requiresByTarget = requires;
         requiredByNode = requiredBy;
-    }
-
-    private ConnectionView connection(String ref, String id, ConnectionKind kind, Href source, String modelNs,
-                                      String targetId) {
-        boolean local = source.isLocal(modelNs);
-        Element src = local ? nodes.get(source.id()) : null;
-        Element tgt = nodes.get(targetId);
-        return new ConnectionView(ref, id.isEmpty() ? null : id, kind,
-                source.id(), src == null ? source.id() : nameOf(source.id()),
-                src == null ? null : kindOf(src), local,
-                targetId, nameOf(targetId), tgt == null ? null : kindOf(tgt));
     }
 
     // ---- elements ------------------------------------------------------------------------------
@@ -324,7 +309,8 @@ public final class DmnReader {
                 .map(r -> new ExpressionView.Rule(attr(r, "id"), texts(r, "inputEntry"), texts(r, "outputEntry"),
                         texts(r, "annotationEntry"), doc.childContent(r, "description")))
                 .toList();
-        return new ExpressionView.DecisionTable(attr(e, "id"), attr(e, "typeRef"), attr(e, "hitPolicy"),
+        return new ExpressionView.DecisionTable(attr(e, "id"), attr(e, "typeRef"),
+                HitPolicy.fromAttribute(attr(e, "hitPolicy")).orElse(HitPolicy.UNIQUE),
                 attr(e, "aggregation"), attr(e, "outputLabel"), attr(e, "preferredOrientation"), inputs, outputs,
                 annotations, rules);
     }

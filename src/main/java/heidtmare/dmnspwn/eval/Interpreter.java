@@ -125,10 +125,9 @@ final class Interpreter {
         if (hits.isEmpty()) {
             return defaults(t, scope);
         }
-        String policy = t.hitPolicy() == null || t.hitPolicy().isBlank() ? "UNIQUE" : t.hitPolicy();
-        return switch (policy) {
-            case "FIRST" -> hits.getFirst().value();
-            case "ANY" -> {
+        return switch (t.hitPolicy()) {
+            case FIRST -> hits.getFirst().value();
+            case ANY -> {
                 Val first = hits.getFirst().value();
                 if (hits.stream().allMatch(h -> Values.same(h.value(), first))) {
                     yield first;
@@ -136,11 +135,11 @@ final class Interpreter {
                 trace.get().error("Hit policy ANY: matched rules " + rules(hits) + " have different outputs");
                 yield Values.NULL;
             }
-            case "PRIORITY" -> byPriority(t, hits, scope).getFirst().value();
-            case "OUTPUT ORDER" -> Values.list(byPriority(t, hits, scope).stream().map(Hit::value).toList());
-            case "RULE ORDER" -> Values.list(hits.stream().map(Hit::value).toList());
-            case "COLLECT" -> collect(t, hits, scope);
-            default -> {
+            case PRIORITY -> byPriority(t, hits, scope).getFirst().value();
+            case OUTPUT_ORDER -> Values.list(byPriority(t, hits, scope).stream().map(Hit::value).toList());
+            case RULE_ORDER -> Values.list(hits.stream().map(Hit::value).toList());
+            case COLLECT -> collect(t, hits, scope);
+            case UNIQUE -> {
                 if (hits.size() > 1) {
                     trace.get().error("Hit policy UNIQUE: rules " + rules(hits) + " all match");
                     yield Values.NULL;
@@ -204,7 +203,7 @@ final class Interpreter {
             }
         }
         if (priorities.stream().allMatch(List::isEmpty)) {
-            trace.get().warning("Hit policy " + t.hitPolicy() + " needs output values to rank outputs; using rule order");
+            trace.get().warning("Hit policy " + t.hitPolicy().attribute() + " needs output values to rank outputs; using rule order");
         }
         Comparator<Hit> order = (a, b) -> 0;
         for (int o = 0; o < priorities.size(); o++) {

@@ -27,6 +27,7 @@ import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.ExpressionView;
+import heidtmare.dmnspwn.model.HitPolicy;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.store.ModelNotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
@@ -170,7 +171,7 @@ public class ElementController {
         ExpressionView logic = element.logic();
         if (!raw && logic instanceof ExpressionView.DecisionTable table) {
             model.addAttribute("table", table);
-            model.addAttribute("hitPolicies", DmnEditor.HIT_POLICIES);
+            model.addAttribute("hitPolicies", HitPolicy.values());
             model.addAttribute("aggregations", DmnEditor.AGGREGATIONS);
             return "logic-table";
         }

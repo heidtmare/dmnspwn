@@ -26,6 +26,11 @@ public enum ConnectionKind {
         return displayName;
     }
 
+    /** Whether this is one of the requirement kinds, which build the requirement graph. */
+    public boolean isRequirement() {
+        return this != ASSOCIATION;
+    }
+
     public String slug() {
         return name().toLowerCase();
     }

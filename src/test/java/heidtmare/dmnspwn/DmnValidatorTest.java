@@ -45,4 +45,17 @@ class DmnValidatorTest {
 
         assertThat(messages(doc)).anyMatch(m -> m.endsWith("references missing element 'Nowhere'"));
     }
+
+    @Test
+    void reportsRequirementCycles() {
+        DmnDocument doc = TestModels.loan();
+        Element requirement = doc.create("informationRequirement");
+        Element ref = doc.create("requiredDecision");
+        ref.setAttribute("href", "#Loan_Offer");
+        requirement.appendChild(ref);
+        doc.insert(new DmnReader(doc).nodeElements().get("Risk_Category"), requirement);
+
+        assertThat(messages(doc)).contains("Requirement cycle involving this element");
+        assertThat(messages(TestModels.loan())).doesNotContain("Requirement cycle involving this element");
+    }
 }

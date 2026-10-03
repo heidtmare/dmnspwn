@@ -5,7 +5,6 @@ import static heidtmare.dmnspwn.xml.DmnDocument.anyChildren;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,34 +48,13 @@ public final class DiagramBuilder {
 
     // ---- DMNDI ---------------------------------------------------------------------------------
 
-    public static Optional<Bounds> bounds(Element shape) {
-        return anyChildren(shape, "Bounds").stream().findFirst().map(b -> new Bounds(
-                num(b, "x"), num(b, "y"), num(b, "width"), num(b, "height")));
-    }
-
-    public static List<Point> waypoints(Element owner) {
-        return anyChildren(owner, "waypoint").stream().map(w -> new Point(num(w, "x"), num(w, "y"))).toList();
-    }
-
-    /** Local element id to its (first) shape in the diagram. */
-    public static Map<String, Element> shapesByElement(DmnDocument doc, Element diagram) {
-        Map<String, Element> result = new LinkedHashMap<>();
-        for (Element shape : anyChildren(diagram, "DMNShape")) {
-            String id = doc.localIdOfRef(shape, shape.getAttribute("dmnElementRef"));
-            if (id != null) {
-                result.putIfAbsent(id, shape);
-            }
-        }
-        return result;
-    }
-
     private static DiagramView fromDmndi(DmnReader reader, Element diagram) {
         DmnDocument doc = reader.document();
         Map<String, Element> elements = reader.nodeElements();
         Map<String, Bounds> placed = new HashMap<>();
         List<Node> nodes = new ArrayList<>();
         for (Element shape : anyChildren(diagram, "DMNShape")) {
-            Optional<Bounds> b = bounds(shape);
+            Optional<Bounds> b = Dmndi.bounds(shape);
             if (b.isEmpty()) {
                 continue;
             }
@@ -88,7 +66,7 @@ public final class DiagramBuilder {
                 continue;
             }
             double divider = anyChildren(shape, "DMNDecisionServiceDividerLine").stream().findFirst()
-                    .map(DiagramBuilder::waypoints).filter(p -> !p.isEmpty()).map(p -> p.getFirst().y())
+                    .map(Dmndi::waypoints).filter(p -> !p.isEmpty()).map(p -> p.getFirst().y())
                     .orElse(Double.NaN);
             nodes.add(node(localId, shape.getAttribute("id"), DmnReader.kindOf(element), reader.nameOf(localId),
                     b.get(), divider, false));
@@ -105,7 +83,7 @@ public final class DiagramBuilder {
             if (c == null) {
                 continue;
             }
-            List<Point> points = waypoints(edge);
+            List<Point> points = Dmndi.waypoints(edge);
             if (points.size() < 2) {
                 Bounds s = placed.get(c.sourceId());
                 Bounds t = placed.get(c.targetId());
@@ -185,13 +163,5 @@ public final class DiagramBuilder {
             }
         }
         return new Bounds(minX - PAD, minY - PAD, maxX - minX + 2 * PAD, maxY - minY + 2 * PAD);
-    }
-
-    private static double num(Element e, String attr) {
-        try {
-            return Double.parseDouble(e.getAttribute(attr));
-        } catch (NumberFormatException ex) {
-            return 0;
-        }
     }
 }
