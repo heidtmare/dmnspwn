@@ -6,7 +6,7 @@ A server-side rendered viewer and editor for OMG **Decision Model and Notation**
 Java 21, Spring Boot 4.1, Spring MVC + Thymeleaf. No front-end build; the only JavaScript is an optional
 drag-and-drop enhancement for the diagram in edit mode.
 
-![dmnspwn demo: browsing a DRD, viewing a decision table, evaluating decisions, editing the diagram and validating](docs/demo.gif)
+![dmnspwn demo: browsing a DRD, viewing a decision table, evaluating decisions, saving a test scenario, editing a rule until the test fails, accepting the new results and validating](docs/demo.gif)
 
 ## Run
 

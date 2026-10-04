@@ -380,9 +380,9 @@ ul.messages .msg-warning { border-color: var(--warn); color: var(--warn); }
 /* ---------- tests ---------- */
 table.tests td { vertical-align: top; }
 table.tests tr.failed td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
-.test-inputs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .6rem; margin: 0; font-size: .88rem; }
+.test-inputs { display: grid; grid-template-columns: auto 1fr; gap: .2rem .6rem; margin: 0; font-size: .88rem; }
 .test-inputs dt { color: var(--muted); }
-.test-inputs dd { margin: 0; overflow-wrap: anywhere; }
+.test-inputs dd { margin: 0; overflow-wrap: break-word; }
 .test-check + .test-check { margin-top: .75rem; }
 .test-check-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .25rem; }
 .test-check .eval-value { margin-bottom: .2rem; }
