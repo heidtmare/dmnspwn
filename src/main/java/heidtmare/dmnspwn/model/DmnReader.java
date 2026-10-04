@@ -24,7 +24,11 @@ import heidtmare.dmnspwn.xml.DmnNamespaces;
 import heidtmare.dmnspwn.xml.DmnXml;
 import heidtmare.dmnspwn.xml.Href;
 
-/** Builds immutable view models from a {@link DmnDocument}. */
+/**
+ * Builds immutable view models from a {@link DmnDocument}. Every view is built on first use and cached, so a reader
+ * is a snapshot: create a new one after editing the document. Like the DOM, a reader is not thread-safe; each
+ * request parses the model and uses its own.
+ */
 public final class DmnReader {
 
     private final DmnDocument doc;
@@ -33,7 +37,12 @@ public final class DmnReader {
     private List<ConnectionView> connections;
     private Map<String, List<ConnectionView>> requiresByTarget;
     private Map<String, List<ConnectionView>> requiredByNode;
+    private ModelInfo info;
+    private List<ImportView> imports;
+    private RequirementGraph requirementGraph;
     private List<ElementView> elements;
+    private Map<String, ElementView> elementsById;
+    private List<ItemDefinitionView> itemDefinitions;
 
     public DmnReader(DmnDocument doc) {
         this.doc = doc;
@@ -52,6 +61,13 @@ public final class DmnReader {
     }
 
     public ModelInfo info() {
+        if (info == null) {
+            info = readInfo();
+        }
+        return info;
+    }
+
+    private ModelInfo readInfo() {
         Element d = doc.definitions();
         return new ModelInfo(attr(d, "id"), attr(d, "name"), attr(d, "namespace"), doc.version(), doc.ns(),
                 doc.childContent(d, "description"), attr(d, "expressionLanguage"), attr(d, "typeLanguage"),
@@ -82,10 +98,13 @@ public final class DmnReader {
     }
 
     public List<ImportView> imports() {
-        return doc.children(doc.definitions(), "import").stream()
-                .map(i -> new ImportView(attr(i, "name"), attr(i, "namespace"), attr(i, "locationURI"),
-                        attr(i, "importType")))
-                .toList();
+        if (imports == null) {
+            imports = doc.children(doc.definitions(), "import").stream()
+                    .map(i -> new ImportView(attr(i, "name"), attr(i, "namespace"), attr(i, "locationURI"),
+                            attr(i, "importType")))
+                    .toList();
+        }
+        return imports;
     }
 
     // ---- connections ---------------------------------------------------------------------------
@@ -123,7 +142,10 @@ public final class DmnReader {
     }
 
     public RequirementGraph requirementGraph() {
-        return new RequirementGraph(connectionElements());
+        if (requirementGraph == null) {
+            requirementGraph = new RequirementGraph(connectionElements());
+        }
+        return requirementGraph;
     }
 
     /** Connections by the element that requires them, and by the elements they lead from (associations: both ends). */
@@ -154,12 +176,15 @@ public final class DmnReader {
     public List<ElementView> elements() {
         if (elements == null) {
             elements = nodes.values().stream().map(this::element).toList();
+            elementsById = new HashMap<>();
+            elements.forEach(e -> elementsById.put(e.id(), e));
         }
         return elements;
     }
 
     public Optional<ElementView> element(String id) {
-        return Optional.ofNullable(nodes.get(id)).map(this::element);
+        elements();
+        return Optional.ofNullable(elementsById.get(id));
     }
 
     /** The boxed expression holding a decision's or business knowledge model's logic, if it has one. */
@@ -225,7 +250,10 @@ public final class DmnReader {
     // ---- item definitions ----------------------------------------------------------------------
 
     public List<ItemDefinitionView> itemDefinitions() {
-        return itemDefinitions(doc.definitions(), "itemDefinition", "");
+        if (itemDefinitions == null) {
+            itemDefinitions = List.copyOf(itemDefinitions(doc.definitions(), "itemDefinition", ""));
+        }
+        return itemDefinitions;
     }
 
     private List<ItemDefinitionView> itemDefinitions(Element parent, String childName, String prefix) {

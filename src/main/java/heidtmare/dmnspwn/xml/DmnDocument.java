@@ -217,13 +217,7 @@ public final class DmnDocument {
     public String uniqueId(String prefix) {
         if (ids == null) {
             ids = new HashSet<>();
-            NodeList all = dom.getElementsByTagNameNS("*", "*");
-            for (int i = 0; i < all.getLength(); i++) {
-                String id = ((Element) all.item(i)).getAttribute("id");
-                if (!id.isEmpty()) {
-                    ids.add(id);
-                }
-            }
+            registerIds(dom.getDocumentElement());
         }
         String id;
         do {
@@ -404,7 +398,24 @@ public final class DmnDocument {
         if (found == null) {
             throw new DmnFormatException("The fragment contains no element");
         }
-        ids = null; // the fragment may bring its own ids
-        return (Element) dom.importNode(found, true);
+        Element imported = (Element) dom.importNode(found, true);
+        if (ids != null) {
+            registerIds(imported); // the fragment may bring its own ids
+        }
+        return imported;
+    }
+
+    /** Adds the ids of an element and its descendants to those {@link #uniqueId} avoids. */
+    private void registerIds(Element root) {
+        if (root.hasAttribute("id")) {
+            ids.add(root.getAttribute("id"));
+        }
+        NodeList all = root.getElementsByTagNameNS("*", "*");
+        for (int i = 0; i < all.getLength(); i++) {
+            String id = ((Element) all.item(i)).getAttribute("id");
+            if (!id.isEmpty()) {
+                ids.add(id);
+            }
+        }
     }
 }

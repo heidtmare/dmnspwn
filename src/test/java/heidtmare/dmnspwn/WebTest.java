@@ -66,6 +66,9 @@ class WebTest {
             mvc.perform(get(url).cookie(EDIT)).andExpect(status().isOk());
         }
         mvc.perform(get("/models/missing")).andExpect(status().isNotFound());
+        mvc.perform(get("/models/loan-eligibility/elements/Missing")).andExpect(status().isNotFound());
+        mvc.perform(get("/models/loan-eligibility/elements/Note_Minors/logic")).andExpect(status().isNotFound());
+        mvc.perform(get("/models/loan-eligibility/types/99")).andExpect(status().isNotFound());
         mvc.perform(get("/s3")).andExpect(status().isNotFound());
         mvc.perform(get("/models/loan-eligibility")).andExpect(content().string(not(containsString("/s3\""))));
     }

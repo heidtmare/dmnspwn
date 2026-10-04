@@ -1,9 +1,7 @@
 package heidtmare.dmnspwn.s3;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
-
-/** A user-visible S3 failure (access denied, missing object, network...). */
-public class S3StoreException extends DmnEditException {
+/** A user-visible S3 failure (access denied, missing object, network, or a link in the wrong state). */
+public class S3StoreException extends RuntimeException {
 
     public S3StoreException(String message) {
         super(message);

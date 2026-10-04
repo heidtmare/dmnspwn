@@ -59,7 +59,9 @@ public final class DmnXml {
         }
         DocumentBuilder builder = BUILDER.get();
         try {
-            return builder.parse(new InputSource(new StringReader(stripBom(xml))));
+            Document document = builder.parse(new InputSource(new StringReader(stripBom(xml))));
+            stripIndentation(document.getDocumentElement());
+            return document;
         } catch (SAXParseException e) {
             throw new DmnFormatException("Malformed XML at line %d, column %d: %s"
                     .formatted(e.getLineNumber(), e.getColumnNumber(), e.getMessage()), e);
@@ -85,8 +87,8 @@ public final class DmnXml {
         return write(element);
     }
 
+    /** Serializes without changing the DOM: parsed documents have no indentation left to strip. */
     private static String write(Element element) {
-        stripIndentation(element);
         try {
             StringWriter out = new StringWriter();
             SERIALIZER.get().transform(new DOMSource(element), new StreamResult(out));
@@ -123,9 +125,8 @@ public final class DmnXml {
     }
 
     /**
-     * Removes whitespace-only text nodes from element-only content so the
-     * serializer can re-indent without producing blank lines. Text inside
-     * leaf elements (e.g. {@code <text>}) is untouched.
+     * Removes whitespace-only text nodes from element-only content, once when parsing, so the serializer
+     * can re-indent without producing blank lines. Text inside leaf elements (e.g. {@code <text>}) is untouched.
      */
     private static void stripIndentation(Element element) {
         NodeList children = element.getChildNodes();

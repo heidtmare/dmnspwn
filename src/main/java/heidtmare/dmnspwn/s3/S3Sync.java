@@ -10,10 +10,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.s3.S3Bucket.RemoteObject;
 import heidtmare.dmnspwn.store.ModelRepository;
 import heidtmare.dmnspwn.store.ModelService;
@@ -28,7 +26,7 @@ import heidtmare.dmnspwn.xml.DmnDocument;
  * </ul>
  */
 @Service
-@ConditionalOnProperty(prefix = "dmnspwn.s3", name = "enabled", havingValue = "true")
+@ConditionalOnS3Enabled
 public class S3Sync {
 
     static final String KEY = "s3.key";
@@ -92,7 +90,7 @@ public class S3Sync {
         if (existing != null) {
             return models.withLock(existing, () -> {
                 if (localChanged(existing)) {
-                    throw new DmnEditException(("Model '%s' is linked to %s and has unpublished local changes. "
+                    throw new S3StoreException(("Model '%s' is linked to %s and has unpublished local changes. "
                             + "Open it and publish them, or use 'Pull from S3' to discard them.")
                             .formatted(existing, bucket.location(object.key())));
                 }
@@ -109,7 +107,7 @@ public class S3Sync {
 
     /** Replaces the local model with the linked object (the previous version stays available to Undo). */
     public void pull(String id) {
-        Link link = link(id).orElseThrow(() -> new DmnEditException("This model is not linked to an S3 object"));
+        Link link = link(id).orElseThrow(() -> new S3StoreException("This model is not linked to an S3 object"));
         RemoteObject object = bucket.get(link.key());
         DmnDocument.parse(object.content());
         models.withLock(id, () -> {

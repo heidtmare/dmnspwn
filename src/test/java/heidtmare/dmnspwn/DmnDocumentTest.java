@@ -36,6 +36,15 @@ class DmnDocumentTest {
     }
 
     @Test
+    void serializingLeavesTheDocumentUnchanged() {
+        DmnDocument doc = TestModels.loan();
+        int before = doc.definitions().getChildNodes().getLength();
+        String first = doc.toXml();
+        assertThat(doc.definitions().getChildNodes().getLength()).isEqualTo(before);
+        assertThat(doc.toXml()).isEqualTo(first);
+    }
+
+    @Test
     void rejectsNonDmnAndDoctypes() {
         assertThatThrownBy(() -> DmnDocument.parse("<foo/>")).isInstanceOf(DmnFormatException.class);
         assertThatThrownBy(() -> DmnDocument.parse("<definitions"))

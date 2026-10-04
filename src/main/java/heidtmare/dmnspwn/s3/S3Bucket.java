@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import heidtmare.dmnspwn.config.DmnProperties;
@@ -34,7 +33,7 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * Translates SDK failures into user-visible {@link S3StoreException}s.
  */
 @Service
-@ConditionalOnProperty(prefix = "dmnspwn.s3", name = "enabled", havingValue = "true")
+@ConditionalOnS3Enabled
 public class S3Bucket {
 
     private static final int MAX_KEY_LENGTH = 1024;

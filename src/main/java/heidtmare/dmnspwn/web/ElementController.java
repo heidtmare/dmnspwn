@@ -17,7 +17,6 @@ import heidtmare.dmnspwn.diagram.DiagramBuilder;
 import heidtmare.dmnspwn.diagram.DiagramView.DiagramRef;
 import heidtmare.dmnspwn.diagram.Dmndi;
 import heidtmare.dmnspwn.diagram.Geometry.Bounds;
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.edit.DecisionTableEditor;
 import heidtmare.dmnspwn.edit.Forms.Action;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
@@ -31,8 +30,8 @@ import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.HitPolicy;
 import heidtmare.dmnspwn.model.Views.ElementView;
-import heidtmare.dmnspwn.store.ModelNotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
+import heidtmare.dmnspwn.store.NotFoundException;
 
 /** Element details, properties, requirements, layout and decision logic editing. */
 @Controller
@@ -145,7 +144,7 @@ public class ElementController {
         DmnReader reader = models.reader(id);
         ElementView element = element(reader, elementId);
         if (!element.kind().hasLogic()) {
-            throw new DmnEditException(element.kind().displayName() + " has no decision logic");
+            throw new NotFoundException(element.kind().displayName() + " has no decision logic");
         }
         PageSupport.common(model, id, reader, models);
         model.addAttribute("element", element);
@@ -193,7 +192,7 @@ public class ElementController {
     }
 
     private static ElementView element(DmnReader reader, String elementId) {
-        return reader.element(elementId).orElseThrow(() -> new ModelNotFoundException(elementId));
+        return reader.element(elementId).orElseThrow(() -> new NotFoundException("Element '" + elementId + "' not found"));
     }
 
     private static String back(String id, String elementId) {
