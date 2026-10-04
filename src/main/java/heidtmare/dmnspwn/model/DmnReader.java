@@ -162,6 +162,20 @@ public final class DmnReader {
         return Optional.ofNullable(nodes.get(id)).map(this::element);
     }
 
+    /** The boxed expression holding a decision's or business knowledge model's logic, if it has one. */
+    public static Optional<Element> logicElement(DmnDocument doc, Element e) {
+        return switch (kindOf(e)) {
+            case DECISION -> doc.expressionChild(e);
+            case BUSINESS_KNOWLEDGE_MODEL -> doc.child(e, "encapsulatedLogic").flatMap(doc::expressionChild);
+            default -> Optional.empty();
+        };
+    }
+
+    /** An element's logic as XML, if it has any. */
+    public Optional<String> logicXml(String id) {
+        return Optional.ofNullable(nodes.get(id)).flatMap(e -> logicElement(doc, e)).map(DmnXml::serialize);
+    }
+
     private ElementView element(Element e) {
         ElementKind kind = kindOf(e);
         String id = e.getAttribute("id");

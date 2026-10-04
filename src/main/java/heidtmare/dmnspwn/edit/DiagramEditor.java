@@ -58,7 +58,14 @@ public final class DiagramEditor {
         return diagram;
     }
 
-    public void addShape(Element diagram, String elementId, ElementKind kind, Bounds at) {
+    /** Puts an element on a diagram (the first one when no id is given) and returns the diagram's id. */
+    public String addShape(String diagramId, String elementId) {
+        Element diagram = ensureDiagram(diagramId);
+        addShape(diagram, elementId, DmnReader.kindOf(EditSupport.node(doc, elementId)), null);
+        return diagram.getAttribute("id");
+    }
+
+    void addShape(Element diagram, String elementId, ElementKind kind, Bounds at) {
         if (Dmndi.shapesByElement(doc, diagram).containsKey(elementId)) {
             return;
         }
@@ -67,7 +74,14 @@ public final class DiagramEditor {
         syncEdges(diagram);
     }
 
-    public void removeShape(Element diagram, String elementId) {
+    /** Takes an element off a diagram (the first one when no id is given) and returns the diagram's id. */
+    public String removeShape(String diagramId, String elementId) {
+        Element diagram = ensureDiagram(diagramId);
+        removeShape(diagram, elementId);
+        return diagram.getAttribute("id");
+    }
+
+    private void removeShape(Element diagram, String elementId) {
         Element shape = Dmndi.shapesByElement(doc, diagram).get(elementId);
         if (shape == null) {
             return;
@@ -83,7 +97,8 @@ public final class DiagramEditor {
     }
 
     /** Moves (and optionally resizes) a shape; decision services carry their contents along. */
-    public void move(Element diagram, String elementId, double x, double y, Double width, Double height) {
+    public void move(String diagramId, String elementId, double x, double y, Double width, Double height) {
+        Element diagram = ensureDiagram(diagramId);
         Map<String, Element> shapes = Dmndi.shapesByElement(doc, diagram);
         Element shape = shapes.get(elementId);
         Element element = doc.findById(elementId)
@@ -120,8 +135,9 @@ public final class DiagramEditor {
         reroute(diagram, touched);
     }
 
-    /** Re-applies the automatic layout to every shape on the diagram. */
-    public void resetLayout(Element diagram) {
+    /** Re-applies the automatic layout to every shape on a diagram (the first one when no id is given). */
+    public String resetLayout(String diagramId) {
+        Element diagram = ensureDiagram(diagramId);
         Map<String, Bounds> layout = AutoLayout.layout(new DmnReader(doc));
         Dmndi.shapesByElement(doc, diagram).forEach((id, shape) -> {
             Bounds b = layout.get(id);
@@ -133,10 +149,11 @@ public final class DiagramEditor {
         });
         syncEdges(diagram);
         reroute(diagram, null);
+        return diagram.getAttribute("id");
     }
 
     /** Adds missing edges for every connection whose ends are both on the diagram. */
-    public void syncEdges(Element diagram) {
+    private void syncEdges(Element diagram) {
         Map<String, Element> shapes = Dmndi.shapesByElement(doc, diagram);
         Set<String> existing = new HashSet<>();
         for (Element edge : anyChildren(diagram, "DMNEdge")) {
@@ -165,11 +182,11 @@ public final class DiagramEditor {
     }
 
     /** Adds edges in every diagram for a newly created connection. */
-    public void addEdgesForNewConnection() {
+    void addEdgesForNewConnection() {
         doc.diagrams().forEach(this::syncEdges);
     }
 
-    public void removeEdges(Element diagram, Set<String> connectionIds) {
+    private void removeEdges(Element diagram, Set<String> connectionIds) {
         for (Element edge : anyChildren(diagram, "DMNEdge")) {
             String ref = doc.localIdOfRef(edge, edge.getAttribute("dmnElementRef"));
             if (ref != null && connectionIds.contains(ref)) {
@@ -179,7 +196,7 @@ public final class DiagramEditor {
     }
 
     /** Removes all DMNDI for an element (shapes) and the given connections (edges) in all diagrams. */
-    public void purge(String elementId, Set<String> connectionIds) {
+    void purge(String elementId, Set<String> connectionIds) {
         for (Element diagram : doc.diagrams()) {
             for (Element shape : anyChildren(diagram, "DMNShape")) {
                 if (elementId != null

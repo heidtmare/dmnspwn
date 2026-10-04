@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -87,6 +88,14 @@ public class ModelService {
             T result = edit.apply(new DmnEditor(doc));
             repository.write(id, doc.toXml(), true);
             return result;
+        });
+    }
+
+    /** Applies an edit that has no result; see {@link #update}. */
+    public void edit(String id, Consumer<DmnEditor> edit) {
+        update(id, ed -> {
+            edit.accept(ed);
+            return null;
         });
     }
 

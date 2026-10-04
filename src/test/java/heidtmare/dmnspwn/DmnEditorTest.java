@@ -40,7 +40,7 @@ class DmnEditorTest {
         DmnEditor ed = new DmnEditor(doc);
         String input = ed.addElement(ElementKind.INPUT_DATA, "Age", null);
         String decision = ed.addElement(ElementKind.DECISION, "Adult", null);
-        ed.connect(input, decision);
+        ed.connections().connect(input, decision);
 
         DmnReader reader = reread(doc);
         assertThat(reader.element(decision).orElseThrow().requires()).singleElement()
@@ -56,13 +56,13 @@ class DmnEditorTest {
     void enforcesConnectionRulesDuplicatesAndCycles() {
         DmnDocument doc = TestModels.loan();
         DmnEditor ed = new DmnEditor(doc);
-        assertThatThrownBy(() -> ed.connect("Loan_Offer", "Applicant_Age"))
+        assertThatThrownBy(() -> ed.connections().connect("Loan_Offer", "Applicant_Age"))
                 .isInstanceOf(DmnEditException.class).hasMessageContaining("does not allow");
-        assertThatThrownBy(() -> ed.connect("Applicant_Age", "Risk_Category"))
+        assertThatThrownBy(() -> ed.connections().connect("Applicant_Age", "Risk_Category"))
                 .hasMessageContaining("already connected");
-        assertThatThrownBy(() -> ed.connect("Loan_Offer", "Risk_Category")).hasMessageContaining("cycle");
-        assertThat(ed.connect("Installment_Calculation", "Eligibility")).isEqualTo(ConnectionKind.KNOWLEDGE);
-        assertThat(ed.connect("Lending_Policy", "Note_Minors")).isEqualTo(ConnectionKind.ASSOCIATION);
+        assertThatThrownBy(() -> ed.connections().connect("Loan_Offer", "Risk_Category")).hasMessageContaining("cycle");
+        assertThat(ed.connections().connect("Installment_Calculation", "Eligibility")).isEqualTo(ConnectionKind.KNOWLEDGE);
+        assertThat(ed.connections().connect("Lending_Policy", "Note_Minors")).isEqualTo(ConnectionKind.ASSOCIATION);
     }
 
     @Test
@@ -78,7 +78,7 @@ class DmnEditorTest {
     @Test
     void disconnectsById() {
         DmnDocument doc = TestModels.loan();
-        new DmnEditor(doc).disconnect("IR_Income_Elig");
+        new DmnEditor(doc).connections().disconnect("IR_Income_Elig");
         assertThat(doc.toXml()).doesNotContain("IR_Income_Elig");
     }
 
@@ -88,7 +88,7 @@ class DmnEditorTest {
         DmnReader reader = new DmnReader(doc);
         String ref = reader.element("Dish").orElseThrow().requires().getFirst().ref();
         assertThat(ref).contains("|");
-        new DmnEditor(doc).disconnect(ref);
+        new DmnEditor(doc).connections().disconnect(ref);
         assertThat(reread(doc).element("Dish").orElseThrow().requires()).hasSize(1);
     }
 
@@ -105,10 +105,10 @@ class DmnEditorTest {
             DecisionTableForm f = new DecisionTableForm();
             f.setHitPolicy("UNIQUE");
             f.setAction(action);
-            ed.saveDecisionTable("Risk_Category", f);
+            ed.tables().save("Risk_Category", f);
         }
 
-        Element table = ed.logic("Risk_Category").orElseThrow();
+        Element table = ed.logic().expression("Risk_Category").orElseThrow();
         Element added = doc.children(table, "rule").get(1);
         Element duplicate = doc.children(table, "rule").get(2);
         assertThat(doc.children(duplicate, "inputEntry")).allMatch(e -> e.hasAttribute("id"));
@@ -133,7 +133,7 @@ class DmnEditorTest {
         row.setAnnotations(List.of("changed"));
         form.setRules(List.of(row));
         form.setAction("addInput:0");
-        ed.saveDecisionTable("Risk_Category", form);
+        ed.tables().save("Risk_Category", form);
 
         var table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
         assertThat(table.hitPolicyCode()).isEqualTo("C#");
@@ -147,7 +147,7 @@ class DmnEditorTest {
             DecisionTableForm f = new DecisionTableForm();
             f.setHitPolicy("UNIQUE");
             f.setAction(action);
-            ed.saveDecisionTable("Risk_Category", f);
+            ed.tables().save("Risk_Category", f);
         }
         table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
         assertThat(table.inputs()).hasSize(2);
@@ -166,18 +166,41 @@ class DmnEditorTest {
         DmnEditor ed = new DmnEditor(doc);
         DecisionTableForm form = new DecisionTableForm();
         form.setHitPolicy("");
-        ed.saveDecisionTable("Risk_Category", form);
+        ed.tables().save("Risk_Category", form);
         var table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
         assertThat(table.hitPolicy()).isEqualTo(HitPolicy.UNIQUE);
 
         form.setHitPolicy("RULE ORDER");
-        ed.saveDecisionTable("Risk_Category", form);
+        ed.tables().save("Risk_Category", form);
         table = (ExpressionView.DecisionTable) reread(doc).element("Risk_Category").orElseThrow().logic();
         assertThat(table.hitPolicyCode()).isEqualTo("R");
 
         form.setHitPolicy("SOMETIMES");
-        assertThatThrownBy(() -> ed.saveDecisionTable("Risk_Category", form))
+        assertThatThrownBy(() -> ed.tables().save("Risk_Category", form))
                 .isInstanceOf(DmnEditException.class).hasMessageContaining("Unknown hit policy");
+    }
+
+    @Test
+    void rejectsUnknownOrIncompleteFormActions() {
+        DmnDocument doc = TestModels.loan();
+        DmnEditor ed = new DmnEditor(doc);
+        DecisionTableForm table = new DecisionTableForm();
+        table.setHitPolicy("UNIQUE");
+        for (var c : List.of(new String[] {"explode", "Unknown action"}, new String[] {"deleteRule", "needs a row"},
+                new String[] {"deleteRule:x", "Invalid row"}, new String[] {"deleteRule:-1", "Invalid row"},
+                new String[] {"deleteRule:99", "out of range"})) {
+            table.setAction(c[0]);
+            assertThatThrownBy(() -> ed.tables().save("Risk_Category", table))
+                    .isInstanceOf(DmnEditException.class).hasMessageContaining(c[1]);
+        }
+        ParametersForm params = new ParametersForm();
+        params.setAction("deleteRule:0");
+        assertThatThrownBy(() -> ed.logic().saveParameters("Installment_Calculation", params))
+                .hasMessageContaining("Unknown action");
+        ItemDefinitionForm type = new ItemDefinitionForm();
+        type.setName("tLoan");
+        type.setAction("moveComponentUp");
+        assertThatThrownBy(() -> ed.types().save("0", type)).hasMessageContaining("needs a row");
     }
 
     @Test
@@ -185,7 +208,7 @@ class DmnEditorTest {
         DmnDocument doc = TestModels.loan();
         DmnEditor ed = new DmnEditor(doc);
         for (LogicType type : LogicType.available(doc.ns())) {
-            ed.setLogicType("Eligibility", type);
+            ed.logic().setType("Eligibility", type);
             ExpressionView logic = reread(doc).element("Eligibility").orElseThrow().logic();
             if (type == LogicType.NONE) {
                 assertThat(logic).isNull();
@@ -193,11 +216,11 @@ class DmnEditorTest {
                 assertThat(logic).isNotNull();
             }
         }
-        ed.setLogicType("Eligibility", LogicType.DECISION_TABLE);
+        ed.logic().setType("Eligibility", LogicType.DECISION_TABLE);
         var table = (ExpressionView.DecisionTable) reread(doc).element("Eligibility").orElseThrow().logic();
         assertThat(table.inputs()).extracting(i -> i.expression()).containsExactly("Risk Category", "Monthly Income");
 
-        ed.setLogicType("Loan_Offer", LogicType.INVOCATION);
+        ed.logic().setType("Loan_Offer", LogicType.INVOCATION);
         var inv = (ExpressionView.Invocation) reread(doc).element("Loan_Offer").orElseThrow().logic();
         assertThat(inv.function()).isEqualTo("Installment Calculation");
         assertThat(inv.bindings()).hasSize(3);
@@ -208,12 +231,12 @@ class DmnEditorTest {
     void replacesLogicFromXmlUsingDocumentPrefixes() {
         DmnDocument doc = TestModels.loan();
         DmnEditor ed = new DmnEditor(doc);
-        ed.replaceLogicXml("Eligibility", "<literalExpression><text>\"Eligible\"</text></literalExpression>");
+        ed.logic().replaceXml("Eligibility", "<literalExpression><text>\"Eligible\"</text></literalExpression>");
         assertThat(reread(doc).element("Eligibility").orElseThrow().logic())
                 .isEqualTo(new ExpressionView.Literal(null, null, "\"Eligible\"", null));
         assertThat(doc.toXml()).doesNotContain("<literalExpression xmlns");
-        assertThatThrownBy(() -> ed.replaceLogicXml("Eligibility", "<foo/>")).isInstanceOf(DmnEditException.class);
-        assertThatThrownBy(() -> ed.replaceLogicXml("Eligibility", "<literalExpression>"))
+        assertThatThrownBy(() -> ed.logic().replaceXml("Eligibility", "<foo/>")).isInstanceOf(DmnEditException.class);
+        assertThatThrownBy(() -> ed.logic().replaceXml("Eligibility", "<literalExpression>"))
                 .isInstanceOf(DmnEditException.class);
     }
 
@@ -230,7 +253,7 @@ class DmnEditorTest {
 
         ParametersForm params = new ParametersForm();
         params.setAction("addParameter");
-        ed.saveParameters("Installment_Calculation", params);
+        ed.logic().saveParameters("Installment_Calculation", params);
 
         ServiceForm service = new ServiceForm();
         service.setOutputDecisions(List.of("Loan_Offer"));
@@ -241,11 +264,11 @@ class DmnEditorTest {
         bad.setInputData(List.of("Loan_Offer"));
         assertThatThrownBy(() -> ed.updateService("Eligibility_Service", bad)).isInstanceOf(DmnEditException.class);
 
-        String path = ed.addItemDefinition("tPerson", null, false);
+        String path = ed.types().add("tPerson", null, false);
         ItemDefinitionForm type = new ItemDefinitionForm();
         type.setName("tPerson");
         type.setAction("addComponent");
-        ed.saveItemDefinition(path, type);
+        ed.types().save(path, type);
 
         DmnReader reader = reread(doc);
         var risk = reader.element("Risk_Category").orElseThrow();
@@ -262,8 +285,7 @@ class DmnEditorTest {
     void movesShapesAndReroutesEdges() {
         DmnDocument doc = TestModels.loan();
         DmnEditor ed = new DmnEditor(doc);
-        Element diagram = ed.diagrams().ensureDiagram(null);
-        ed.diagrams().move(diagram, "Eligibility_Service", 300, 150, null, null);
+        ed.diagrams().move(null, "Eligibility_Service", 300, 150, null, null);
 
         var view = DiagramBuilder.build(reread(doc), null);
         var risk = view.nodes().stream().filter(n -> n.elementId().equals("Risk_Category")).findFirst().orElseThrow();
@@ -276,8 +298,7 @@ class DmnEditorTest {
     void materialisesAutoLayoutAsDmndiOnFirstLayoutEdit() {
         DmnDocument doc = TestModels.dish();
         DmnEditor ed = new DmnEditor(doc);
-        Element diagram = ed.diagrams().ensureDiagram(null);
-        ed.diagrams().move(diagram, "Dish", 0, 0, 200.0, 100.0);
+        ed.diagrams().move(null, "Dish", 0, 0, 200.0, 100.0);
         var view = DiagramBuilder.build(reread(doc), null);
         assertThat(view.fromDmndi()).isTrue();
         assertThat(view.nodes()).hasSize(8);
@@ -288,7 +309,7 @@ class DmnEditorTest {
     @Test
     void convertsOlderModelsToDmn15() {
         DmnDocument doc = TestModels.dish();
-        new DmnEditor(doc).convertToLatest();
+        new DmnEditor(doc).converter().toLatest();
         DmnDocument converted = DmnDocument.parse(doc.toXml());
         assertThat(converted.version()).isEqualTo("1.5");
         assertThat(new DmnReader(converted).elements()).hasSize(8);
@@ -301,7 +322,7 @@ class DmnEditorTest {
         DmnDocument old = DmnDocument.parse(v11);
         assertThat(old.supportsDmndi()).isFalse();
         assertThatThrownBy(() -> new DmnEditor(old).diagrams().ensureDiagram(null)).isInstanceOf(DmnEditException.class);
-        new DmnEditor(old).convertToLatest();
+        new DmnEditor(old).converter().toLatest();
         DmnReader reader = new DmnReader(DmnDocument.parse(old.toXml()));
         assertThat(reader.info().version()).isEqualTo("1.5");
         assertThat(reader.element("a").orElseThrow().typeRef()).isEqualTo("number");

@@ -47,4 +47,9 @@ public final class Dmndi {
             return 0;
         }
     }
+
+    /** The bounds of an element's shape on a diagram, if the diagram exists and shows the element. */
+    public static Optional<Bounds> shapeBounds(DmnDocument doc, String diagramId, String elementId) {
+        return doc.diagram(diagramId).map(d -> shapesByElement(doc, d).get(elementId)).flatMap(Dmndi::bounds);
+    }
 }

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import heidtmare.dmnspwn.edit.DmnEditException;
+import heidtmare.dmnspwn.edit.Forms.Action;
 import heidtmare.dmnspwn.edit.Forms.ItemDefinitionForm;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
@@ -41,7 +42,7 @@ public class TypeController {
     public String add(@PathVariable String id, @RequestParam String name,
                       @RequestParam(required = false) String typeRef,
                       @RequestParam(defaultValue = "false") boolean collection, RedirectAttributes flash) {
-        String path = models.update(id, ed -> ed.addItemDefinition(name, typeRef, collection));
+        String path = models.update(id, ed -> ed.types().add(name, typeRef, collection));
         flash.addFlashAttribute("success", "Data type '" + name.strip() + "' added");
         return "redirect:/models/" + id + "/types/" + path;
     }
@@ -58,11 +59,8 @@ public class TypeController {
     @PostMapping("/{path}")
     public String save(@PathVariable String id, @PathVariable String path, @ModelAttribute ItemDefinitionForm form,
                        RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.saveItemDefinition(path, form);
-            return null;
-        });
-        if (form.getAction() == null || "save".equals(form.getAction())) {
+        models.edit(id, ed -> ed.types().save(path, form));
+        if (Action.isSave(form.getAction())) {
             flash.addFlashAttribute("success", "Data type saved");
         }
         return "redirect:/models/" + id + "/types/" + path;
@@ -70,10 +68,7 @@ public class TypeController {
 
     @PostMapping("/{path}/delete")
     public String delete(@PathVariable String id, @PathVariable String path, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.deleteItemDefinition(path);
-            return null;
-        });
+        models.edit(id, ed -> ed.types().delete(path));
         flash.addFlashAttribute("success", "Data type deleted");
         int dot = path.lastIndexOf('.');
         return "redirect:/models/" + id + "/types" + (dot < 0 ? "" : "/" + path.substring(0, dot));
