@@ -11,7 +11,7 @@
 
 <header th:fragment="topbar" class="topbar">
     <a class="brand" th:href="@{/}">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 5h18v14H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M9 10v9" stroke="currentColor" stroke-width="2"/></svg>
+        <img class="brand-logo" th:src="@{/images/dmnspwn-emblem.png}" src="/images/dmnspwn-emblem.png" width="28" height="28" alt="">
         <span>dmn<strong>spwn</strong></span>
     </a>
     <nav class="crumbs" aria-label="Breadcrumb" th:if="${info != null}">

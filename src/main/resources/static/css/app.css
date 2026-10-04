@@ -105,7 +105,7 @@ h4 { font-size: .9rem; color: var(--muted); margin-top: .8rem; }
 }
 .brand { display: flex; align-items: center; gap: .5rem; color: var(--text); font-size: 1.05rem; }
 .brand:hover { text-decoration: none; }
-.brand svg { color: var(--accent); }
+.brand-logo { display: block; border-radius: 6px; }
 .crumbs { display: flex; gap: .4rem; align-items: center; color: var(--muted); min-width: 0; overflow: hidden; white-space: nowrap; }
 .crumbs a { overflow: hidden; text-overflow: ellipsis; }
 .mode { margin-left: auto; display: flex; align-items: center; gap: .5rem; }

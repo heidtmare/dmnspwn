@@ -1,3 +1,5 @@
+<p align="center"><img src="src/main/resources/static/images/dmnspwn-icon.png" alt="dmnspwn logo" width="160"></p>
+
 # dmnspwn
 
 A server-side rendered viewer and editor for OMG **Decision Model and Notation** (DMN 1.1 – 1.5) models.
