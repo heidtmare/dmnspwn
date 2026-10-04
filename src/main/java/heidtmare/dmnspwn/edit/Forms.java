@@ -1,6 +1,7 @@
 package heidtmare.dmnspwn.edit;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /** Mutable form-backing beans bound by Spring MVC (indexed properties need JavaBeans). */
@@ -9,21 +10,136 @@ public final class Forms {
     private Forms() {
     }
 
-    /** Parses structural actions such as {@code deleteRule:3}. */
-    public record Action(String name, int index) {
-        public static Action parse(String raw) {
-            if (raw == null || raw.isBlank()) {
-                return new Action("save", -1);
+    private static final String SAVE = "save";
+
+    /** A structural command of an editing form, posted in its {@code action} field. */
+    public interface Command {
+
+        /** The command as written in the form, e.g. {@code deleteRule}. */
+        String key();
+
+        /** Whether the command must name the row it applies to; other commands may name a position. */
+        boolean needsRow();
+    }
+
+    /**
+     * A parsed {@code action} field such as {@code deleteRule:3}: the command and its row, -1 when none is given.
+     * A missing action means save; an unknown command or malformed row is rejected.
+     */
+    public record Action<C extends Enum<C> & Command>(C command, int row) {
+
+        public static <C extends Enum<C> & Command> Action<C> parse(String raw, Class<C> commands) {
+            String text = raw == null || raw.isBlank() ? SAVE : raw.strip();
+            int colon = text.indexOf(':');
+            String key = colon < 0 ? text : text.substring(0, colon);
+            C command = Arrays.stream(commands.getEnumConstants()).filter(c -> c.key().equals(key)).findFirst()
+                    .orElseThrow(() -> new DmnEditException("Unknown action " + key));
+            int row = -1;
+            if (colon >= 0) {
+                try {
+                    row = Integer.parseInt(text.substring(colon + 1));
+                } catch (NumberFormatException e) {
+                    row = -1;
+                }
+                if (row < 0) {
+                    throw new DmnEditException("Invalid row in action " + text);
+                }
             }
-            int colon = raw.indexOf(':');
-            if (colon < 0) {
-                return new Action(raw, -1);
+            if (command.needsRow() && row < 0) {
+                throw new DmnEditException("Action " + key + " needs a row");
             }
-            try {
-                return new Action(raw.substring(0, colon), Integer.parseInt(raw.substring(colon + 1)));
-            } catch (NumberFormatException e) {
-                return new Action(raw.substring(0, colon), -1);
-            }
+            return new Action<>(command, row);
+        }
+
+        /** Whether an {@code action} field asks for a plain save, without a structural change. */
+        public static boolean isSave(String raw) {
+            return raw == null || raw.isBlank() || SAVE.equals(raw.strip());
+        }
+    }
+
+    /** Commands of the decision table form. */
+    public enum TableCommand implements Command {
+        SAVE(Forms.SAVE, false),
+        ADD_RULE("addRule", false),
+        DUPLICATE_RULE("duplicateRule", true),
+        DELETE_RULE("deleteRule", true),
+        MOVE_RULE_UP("moveRuleUp", true),
+        MOVE_RULE_DOWN("moveRuleDown", true),
+        ADD_INPUT("addInput", false),
+        DELETE_INPUT("deleteInput", true),
+        ADD_OUTPUT("addOutput", false),
+        DELETE_OUTPUT("deleteOutput", true),
+        ADD_ANNOTATION("addAnnotation", false),
+        DELETE_ANNOTATION("deleteAnnotation", true);
+
+        private final String key;
+        private final boolean needsRow;
+
+        TableCommand(String key, boolean needsRow) {
+            this.key = key;
+            this.needsRow = needsRow;
+        }
+
+        @Override
+        public String key() {
+            return key;
+        }
+
+        @Override
+        public boolean needsRow() {
+            return needsRow;
+        }
+    }
+
+    /** Commands of the business knowledge model parameters form. */
+    public enum ParameterCommand implements Command {
+        SAVE(Forms.SAVE, false),
+        ADD_PARAMETER("addParameter", false),
+        DELETE_PARAMETER("deleteParameter", true),
+        MOVE_PARAMETER_UP("moveParameterUp", true);
+
+        private final String key;
+        private final boolean needsRow;
+
+        ParameterCommand(String key, boolean needsRow) {
+            this.key = key;
+            this.needsRow = needsRow;
+        }
+
+        @Override
+        public String key() {
+            return key;
+        }
+
+        @Override
+        public boolean needsRow() {
+            return needsRow;
+        }
+    }
+
+    /** Commands of the item definition form. */
+    public enum ComponentCommand implements Command {
+        SAVE(Forms.SAVE, false),
+        ADD_COMPONENT("addComponent", false),
+        DELETE_COMPONENT("deleteComponent", true),
+        MOVE_COMPONENT_UP("moveComponentUp", true);
+
+        private final String key;
+        private final boolean needsRow;
+
+        ComponentCommand(String key, boolean needsRow) {
+            this.key = key;
+            this.needsRow = needsRow;
+        }
+
+        @Override
+        public String key() {
+            return key;
+        }
+
+        @Override
+        public boolean needsRow() {
+            return needsRow;
         }
     }
 

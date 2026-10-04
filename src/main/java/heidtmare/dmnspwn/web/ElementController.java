@@ -15,9 +15,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import heidtmare.dmnspwn.diagram.DiagramBuilder;
 import heidtmare.dmnspwn.diagram.DiagramView.DiagramRef;
+import heidtmare.dmnspwn.diagram.Dmndi;
 import heidtmare.dmnspwn.diagram.Geometry.Bounds;
 import heidtmare.dmnspwn.edit.DmnEditException;
-import heidtmare.dmnspwn.edit.DmnEditor;
+import heidtmare.dmnspwn.edit.DecisionTableEditor;
+import heidtmare.dmnspwn.edit.Forms.Action;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
 import heidtmare.dmnspwn.edit.Forms.ElementForm;
 import heidtmare.dmnspwn.edit.Forms.ParametersForm;
@@ -31,7 +33,6 @@ import heidtmare.dmnspwn.model.HitPolicy;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.store.ModelNotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
-import heidtmare.dmnspwn.xml.DmnXml;
 
 /** Element details, properties, requirements, layout and decision logic editing. */
 @Controller
@@ -78,10 +79,9 @@ public class ElementController {
         }
         model.addAttribute("dependents", dependents);
 
-        DmnEditor editor = new DmnEditor(reader.document());
         List<Placement> placements = new ArrayList<>();
         for (DiagramRef d : DiagramBuilder.diagrams(reader.document())) {
-            editor.shapeBounds(d.id(), elementId).ifPresent(b -> placements.add(new Placement(d, b)));
+            Dmndi.shapeBounds(reader.document(), d.id(), elementId).ifPresent(b -> placements.add(new Placement(d, b)));
         }
         model.addAttribute("placements", placements);
         return "element";
@@ -90,20 +90,14 @@ public class ElementController {
     @PostMapping
     public String update(@PathVariable String id, @PathVariable String elementId,
                          @ModelAttribute ElementForm form, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.updateElement(elementId, form);
-            return null;
-        });
+        models.edit(id, ed -> ed.updateElement(elementId, form));
         flash.addFlashAttribute("success", "Saved");
         return back(id, elementId);
     }
 
     @PostMapping("/delete")
     public String delete(@PathVariable String id, @PathVariable String elementId, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.deleteElement(elementId);
-            return null;
-        });
+        models.edit(id, ed -> ed.deleteElement(elementId));
         flash.addFlashAttribute("success", "Element deleted");
         return "redirect:/models/" + id;
     }
@@ -114,10 +108,7 @@ public class ElementController {
                          @RequestParam(required = false) String drd, @RequestParam double x, @RequestParam double y,
                          @RequestParam(required = false) Double width, @RequestParam(required = false) Double height,
                          RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.diagrams().move(ed.diagrams().ensureDiagram(drd), elementId, x, y, width, height);
-            return null;
-        });
+        models.edit(id, ed -> ed.diagrams().move(drd, elementId, x, y, width, height));
         flash.addFlashAttribute("success", "Layout saved");
         return back(id, elementId);
     }
@@ -125,10 +116,7 @@ public class ElementController {
     @PostMapping("/service")
     public String service(@PathVariable String id, @PathVariable String elementId,
                           @ModelAttribute ServiceForm form, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.updateService(elementId, form);
-            return null;
-        });
+        models.edit(id, ed -> ed.updateService(elementId, form));
         flash.addFlashAttribute("success", "Decision service saved");
         return back(id, elementId);
     }
@@ -136,10 +124,7 @@ public class ElementController {
     @PostMapping("/parameters")
     public String parameters(@PathVariable String id, @PathVariable String elementId,
                              @ModelAttribute ParametersForm form, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.saveParameters(elementId, form);
-            return null;
-        });
+        models.edit(id, ed -> ed.logic().saveParameters(elementId, form));
         flash.addFlashAttribute("success", "Parameters saved");
         return back(id, elementId) + "#parameters";
     }
@@ -149,10 +134,7 @@ public class ElementController {
     @PostMapping("/logic/type")
     public String logicType(@PathVariable String id, @PathVariable String elementId, @RequestParam LogicType type,
                             RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.setLogicType(elementId, type);
-            return null;
-        });
+        models.edit(id, ed -> ed.logic().setType(elementId, type));
         flash.addFlashAttribute("success", type == LogicType.NONE ? "Logic removed" : type.displayName() + " created");
         return type == LogicType.NONE ? back(id, elementId) : "redirect:/models/" + id + "/elements/" + elementId + "/logic";
     }
@@ -172,26 +154,22 @@ public class ElementController {
         if (!raw && logic instanceof ExpressionView.DecisionTable table) {
             model.addAttribute("table", table);
             model.addAttribute("hitPolicies", HitPolicy.values());
-            model.addAttribute("aggregations", DmnEditor.AGGREGATIONS);
+            model.addAttribute("aggregations", DecisionTableEditor.AGGREGATIONS);
             return "logic-table";
         }
         if (!raw && logic instanceof ExpressionView.Literal literal) {
             model.addAttribute("literal", literal);
             return "logic-literal";
         }
-        DmnEditor editor = new DmnEditor(reader.document());
-        model.addAttribute("xml", editor.logic(elementId).map(e -> DmnXml.serialize(e)).orElse(""));
+        model.addAttribute("xml", reader.logicXml(elementId).orElse(""));
         return "logic-xml";
     }
 
     @PostMapping("/logic/decision-table")
     public String saveTable(@PathVariable String id, @PathVariable String elementId,
                             @ModelAttribute DecisionTableForm form, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.saveDecisionTable(elementId, form);
-            return null;
-        });
-        if (form.getAction() == null || "save".equals(form.getAction())) {
+        models.edit(id, ed -> ed.tables().save(elementId, form));
+        if (Action.isSave(form.getAction())) {
             flash.addFlashAttribute("success", "Decision table saved");
         }
         return "redirect:/models/" + id + "/elements/" + elementId + "/logic";
@@ -201,10 +179,7 @@ public class ElementController {
     public String saveLiteral(@PathVariable String id, @PathVariable String elementId,
                               @RequestParam(defaultValue = "") String text,
                               @RequestParam(required = false) String typeRef, RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.updateLiteral(elementId, text, typeRef);
-            return null;
-        });
+        models.edit(id, ed -> ed.logic().saveLiteral(elementId, text, typeRef));
         flash.addFlashAttribute("success", "Expression saved");
         return "redirect:/models/" + id + "/elements/" + elementId + "/logic";
     }
@@ -212,10 +187,7 @@ public class ElementController {
     @PostMapping("/logic/xml")
     public String saveXml(@PathVariable String id, @PathVariable String elementId, @RequestParam String xml,
                           RedirectAttributes flash) {
-        models.update(id, ed -> {
-            ed.replaceLogicXml(elementId, xml);
-            return null;
-        });
+        models.edit(id, ed -> ed.logic().replaceXml(elementId, xml));
         flash.addFlashAttribute("success", "Expression saved");
         return "redirect:/models/" + id + "/elements/" + elementId + "/logic?raw=true";
     }

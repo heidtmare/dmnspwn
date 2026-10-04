@@ -20,14 +20,13 @@ import org.camunda.feel.syntaxtree.ValFunction;
 import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
 import heidtmare.dmnspwn.eval.Evaluation.ExpressionResult;
 import heidtmare.dmnspwn.eval.Evaluation.InputResult;
-import heidtmare.dmnspwn.model.BuiltInTypes;
+import heidtmare.dmnspwn.eval.InputForms.InputField;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.Views.ConnectionView;
 import heidtmare.dmnspwn.model.Views.ElementView;
-import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
 import heidtmare.dmnspwn.model.Views.RefView;
 
 import scala.jdk.javaapi.CollectionConverters;
@@ -39,13 +38,9 @@ import scala.jdk.javaapi.CollectionConverters;
  */
 public final class ModelEvaluator {
 
-    /** An input data element as a form field. */
-    public record InputField(String id, String name, String typeRef, String placeholder, List<String> suggestions) {
-    }
-
     private final Feel feel;
     private final Map<String, ElementView> elements = new LinkedHashMap<>();
-    private final Map<String, ItemDefinitionView> types = new HashMap<>();
+    private final InputForms inputForms;
     private final Feel.QuotedNames quotedNames;
     private final List<ElementView> decisions;
     private List<InputField> inputFields;
@@ -53,8 +48,8 @@ public final class ModelEvaluator {
     public ModelEvaluator(DmnReader reader, Feel feel) {
         this.feel = feel;
         reader.elements().forEach(e -> elements.put(e.id(), e));
-        reader.itemDefinitions().forEach(t -> types.putIfAbsent(t.name(), t));
-        this.quotedNames = Feel.QuotedNames.of(names(reader));
+        this.inputForms = new InputForms(reader.itemDefinitions(), feel);
+        this.quotedNames = Feel.QuotedNames.of(ModelNames.of(reader));
         this.decisions = elements.values().stream().filter(e -> e.kind() == ElementKind.DECISION).toList();
     }
 
@@ -65,9 +60,7 @@ public final class ModelEvaluator {
     public List<InputField> inputFields() {
         if (inputFields == null) {
             inputFields = elements.values().stream().filter(e -> e.kind() == ElementKind.INPUT_DATA)
-                    .map(e -> new InputField(e.id(), e.name(), e.typeRef(), placeholder(e.typeRef()),
-                            suggestions(e.typeRef())))
-                    .toList();
+                    .map(inputForms::field).toList();
         }
         return inputFields;
     }
@@ -307,137 +300,6 @@ public final class ModelEvaluator {
                 case DECISION_SERVICE -> service(e);
                 default -> null;
             };
-        }
-    }
-
-    // ---- input form ----------------------------------------------------------------------------
-
-    /**
-     * The item definitions a type reference resolves through, in order, until it reaches a name that is not an item
-     * definition (a built-in or unknown type). A cyclic definition ends the chain where it would repeat.
-     */
-    private List<ItemDefinitionView> typeChain(String typeRef) {
-        List<ItemDefinitionView> chain = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String t = typeRef; t != null && seen.add(t) && types.containsKey(t); t = types.get(t).typeRef()) {
-            chain.add(types.get(t));
-        }
-        return chain;
-    }
-
-    private String placeholder(String typeRef) {
-        List<ItemDefinitionView> chain = typeChain(typeRef);
-        String base = chain.isEmpty() ? typeRef : chain.getLast().typeRef();
-        for (ItemDefinitionView item : chain) {
-            if (item.collection()) {
-                base = "list";
-                break;
-            }
-            if (!item.components().isEmpty()) {
-                return structurePlaceholder(item);
-            }
-        }
-        if (base == null) {
-            return "FEEL expression";
-        }
-        return switch (BuiltInTypes.canonical(base)) {
-            case "number" -> "e.g. 42";
-            case "string" -> "e.g. \"text\"";
-            case "boolean" -> "true or false";
-            case "date" -> "e.g. date(\"2024-01-31\")";
-            case "time" -> "e.g. time(\"10:30:00\")";
-            case "date and time" -> "e.g. date and time(\"2024-01-31T10:30:00\")";
-            case "days and time duration" -> "e.g. duration(\"P1DT2H\")";
-            case "years and months duration" -> "e.g. duration(\"P1Y6M\")";
-            case "list" -> "e.g. [1, 2, 3]";
-            case "context" -> "e.g. {name: \"value\"}";
-            default -> "FEEL expression";
-        };
-    }
-
-    private static String structurePlaceholder(ItemDefinitionView item) {
-        StringBuilder sb = new StringBuilder("{");
-        for (ItemDefinitionView c : item.components()) {
-            sb.append(sb.length() == 1 ? "" : ", ")
-                    .append(Feel.isIdentifier(c.name()) ? c.name() : "\"" + c.name() + "\"").append(": …");
-        }
-        return sb.append('}').toString();
-    }
-
-    /** Allowed values of the (item definition) type, as FEEL literals. */
-    private List<String> suggestions(String typeRef) {
-        List<ItemDefinitionView> chain = typeChain(typeRef);
-        for (ItemDefinitionView item : chain) {
-            if (item.allowedValues() != null && !item.allowedValues().isBlank()) {
-                Feel.Result r = feel.evaluate("[" + item.allowedValues() + "]", Scope.empty());
-                return r.failed() || !r.warnings().isEmpty() ? List.of()
-                        : Values.items(r.value()).stream().map(Values::format).toList();
-            }
-        }
-        String base = chain.isEmpty() ? typeRef : chain.getLast().typeRef();
-        return "boolean".equals(base) ? List.of("true", "false") : List.of();
-    }
-
-    // ---- names ---------------------------------------------------------------------------------
-
-    /** Every name in the model that FEEL text may refer to; those with spaces get backtick-quoted. */
-    private static Set<String> names(DmnReader reader) {
-        Set<String> names = new HashSet<>();
-        for (ElementView e : reader.elements()) {
-            names.add(e.name());
-            e.parameters().forEach(p -> names.add(p.name()));
-            collect(e.logic(), names);
-        }
-        collectTypes(reader.itemDefinitions(), names);
-        names.remove(null);
-        return names;
-    }
-
-    private static void collectTypes(List<ItemDefinitionView> items, Set<String> names) {
-        for (ItemDefinitionView item : items) {
-            names.add(item.name());
-            collectTypes(item.components(), names);
-        }
-    }
-
-    private static void collect(ExpressionView x, Set<String> names) {
-        switch (x) {
-            case null -> {
-            }
-            case ExpressionView.DecisionTable t -> t.outputs().forEach(o -> names.add(o.name()));
-            case ExpressionView.Context c -> c.entries().forEach(e -> {
-                names.add(e.name());
-                collect(e.value(), names);
-            });
-            case ExpressionView.Relation r -> {
-                r.columns().forEach(c -> names.add(c.name()));
-                r.rows().forEach(row -> row.forEach(cell -> collect(cell, names)));
-            }
-            case ExpressionView.ListExpr l -> l.items().forEach(i -> collect(i, names));
-            case ExpressionView.Invocation i -> i.bindings().forEach(b -> {
-                names.add(b.name());
-                collect(b.value(), names);
-            });
-            case ExpressionView.Function f -> {
-                f.parameters().forEach(p -> names.add(p.name()));
-                collect(f.body(), names);
-            }
-            case ExpressionView.Conditional c -> {
-                collect(c.condition(), names);
-                collect(c.then(), names);
-                collect(c.otherwise(), names);
-            }
-            case ExpressionView.Iterator i -> {
-                names.add(i.variable());
-                collect(i.collection(), names);
-                collect(i.body(), names);
-            }
-            case ExpressionView.Filter f -> {
-                collect(f.collection(), names);
-                collect(f.match(), names);
-            }
-            default -> {
-            }
         }
     }
 }

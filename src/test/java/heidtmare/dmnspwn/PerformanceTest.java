@@ -65,7 +65,7 @@ class PerformanceTest {
         DecisionTableForm f = new DecisionTableForm();
         f.setHitPolicy("UNIQUE");
         f.setAction(action);
-        ed.saveDecisionTable("Risk_Category", f);
+        ed.tables().save("Risk_Category", f);
     }
 
     @Test
