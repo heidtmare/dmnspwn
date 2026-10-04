@@ -146,6 +146,7 @@ h4 { font-size: .9rem; color: var(--muted); margin-top: .8rem; }
 .count { display: inline-block; min-width: 1.3rem; text-align: center; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 0 .3rem; margin-left: .2rem; }
 .count.err { background: var(--danger-soft); color: var(--danger); }
 .count.warn { background: var(--warn-soft); color: var(--warn); }
+.count.ok { background: var(--ok-soft); color: var(--ok); }
 
 .model-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 .model-layout.with-side { grid-template-columns: minmax(0, 1fr) 300px; }
@@ -374,6 +375,23 @@ ul.messages li { padding: .15rem 0 .15rem .5rem; border-left: 3px solid; margin-
 ul.messages .msg-error { border-color: var(--danger); color: var(--danger); }
 ul.messages .msg-warning { border-color: var(--warn); color: var(--warn); }
 @media (max-width: 900px) { .eval-layout { grid-template-columns: minmax(0, 1fr); } }
+.save-test { border-top: 1px solid var(--border); padding-top: .75rem; }
+
+/* ---------- tests ---------- */
+table.tests td { vertical-align: top; }
+table.tests tr.failed td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.test-inputs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .6rem; margin: 0; font-size: .88rem; }
+.test-inputs dt { color: var(--muted); }
+.test-inputs dd { margin: 0; overflow-wrap: anywhere; }
+.test-check + .test-check { margin-top: .75rem; }
+.test-check-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .25rem; }
+.test-check .eval-value { margin-bottom: .2rem; }
+.test-check .eval-value small { min-width: 4.2rem; }
+.test-check details { margin-top: .3rem; }
+.test-check summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.test-check .expr-wrap { overflow-x: auto; margin-top: .4rem; }
+.test-actions { white-space: nowrap; text-align: right; }
+.test-actions form, .test-actions a { margin-left: .3rem; }
 
 /* ---------- S3 ---------- */
 .s3-link { display: flex; flex-direction: column; gap: .2rem; color: var(--text); }

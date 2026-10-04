@@ -37,10 +37,12 @@ import heidtmare.dmnspwn.store.ModelService;
 public class ModelController {
 
     private final ModelService models;
+    private final PageSupport pages;
     private final TemplateEngine templates;
 
-    public ModelController(ModelService models, TemplateEngine templates) {
+    public ModelController(ModelService models, TemplateEngine templates, PageSupport pages) {
         this.models = models;
+        this.pages = pages;
         this.templates = templates;
     }
 
@@ -48,7 +50,7 @@ public class ModelController {
     public String view(@PathVariable String id, @RequestParam(required = false) String drd,
                        @RequestParam(defaultValue = "false") boolean actual, Model model) {
         DmnReader reader = models.reader(id);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         DiagramView diagram = DiagramBuilder.build(reader, drd);
         List<ElementView> elements = reader.elements();
         Set<String> placed = new HashSet<>();
@@ -165,7 +167,7 @@ public class ModelController {
 
     @GetMapping("/source")
     public String source(@PathVariable String id, Model model) {
-        PageSupport.common(model, id, models.reader(id), models);
+        pages.common(model, id, models.reader(id));
         model.addAttribute("xml", models.xml(id));
         return "source";
     }
@@ -180,7 +182,7 @@ public class ModelController {
     @GetMapping("/validation")
     public String validation(@PathVariable String id, Model model) {
         DmnReader reader = models.reader(id);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         return "validation";
     }
 

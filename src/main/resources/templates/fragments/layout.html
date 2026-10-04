@@ -49,6 +49,12 @@
         <a th:href="@{/models/{id}(id=${modelId})}" th:classappend="${active == 'drd'} ? 'active'">Diagram</a>
         <a th:href="@{/models/{id}/types(id=${modelId})}" th:classappend="${active == 'types'} ? 'active'">Data types</a>
         <a th:href="@{/models/{id}/evaluate(id=${modelId})}" th:classappend="${active == 'evaluate'} ? 'active'">Evaluate</a>
+        <a th:href="@{/models/{id}/tests(id=${modelId})}" th:classappend="${active == 'tests'} ? 'active'">
+            Tests
+            <span class="count err" th:if="${tests.error() != null}" title="The test file cannot be read">!</span>
+            <span class="count err" th:if="${tests.failed() > 0}" th:text="${tests.failed()}" title="Failing tests">1</span>
+            <span class="count ok" th:if="${tests.total() > 0 and tests.failed() == 0}" th:text="${tests.total()}" title="All tests pass">3</span>
+        </a>
         <a th:href="@{/models/{id}/source(id=${modelId})}" th:classappend="${active == 'source'} ? 'active'">XML source</a>
         <a th:href="@{/models/{id}/validation(id=${modelId})}" th:classappend="${active == 'validation'} ? 'active'">
             Validation

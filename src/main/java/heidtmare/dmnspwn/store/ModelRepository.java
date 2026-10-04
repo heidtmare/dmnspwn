@@ -26,12 +26,16 @@ import org.springframework.stereotype.Repository;
 
 import heidtmare.dmnspwn.config.DmnProperties;
 
-/** Stores each model as {@code <id>.dmn}, with previous versions under {@code .history/<id>/} for undo. */
+/**
+ * Stores each model as {@code <id>.dmn}, with previous versions under {@code .history/<id>/} for undo and its test
+ * scenarios beside it as {@code <id>.tests.xml}.
+ */
 @Repository
 public class ModelRepository {
 
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_-]{0,80}");
     private static final String EXT = ".dmn";
+    private static final String TESTS_EXT = ".tests.xml";
     /** Snapshot file names: {@code <millis>-<nanos>.dmn}. Anything else in a history directory is ignored. */
     private static final Pattern SNAPSHOT = Pattern.compile("\\d+-\\d+\\.dmn");
 
@@ -141,6 +145,7 @@ public class ModelRepository {
             Files.deleteIfExists(file(id));
             writes.merge(id, 1L, Long::sum);
             Files.deleteIfExists(meta.resolve(id + ".properties"));
+            Files.deleteIfExists(tests(id));
             Path dir = history.resolve(id);
             if (Files.isDirectory(dir)) {
                 try (Stream<Path> files = Files.list(dir)) {
@@ -204,6 +209,39 @@ public class ModelRepository {
         }
     }
 
+    /** The model's test scenarios (DMN TCK test case XML), or empty if it has none. */
+    public Optional<String> readTests(String id) {
+        Path file = tests(requireValidId(id));
+        if (!Files.isRegularFile(file)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Files.readString(file, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** Stores the model's test scenarios; {@code null} removes them. */
+    public void writeTests(String id, String xml) {
+        Path file = tests(requireValidId(id));
+        try {
+            if (xml == null) {
+                Files.deleteIfExists(file);
+                return;
+            }
+            Path tmp = Files.createTempFile(directory, ".tmp-", TESTS_EXT);
+            Files.writeString(tmp, xml, StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /** A fresh, filesystem-safe id derived from a model name. */
     public String newId(String nameHint) {
         String base = nameHint == null ? "" : nameHint.toLowerCase(Locale.ROOT)
@@ -236,6 +274,10 @@ public class ModelRepository {
 
     private Path file(String id) {
         return directory.resolve(id + EXT);
+    }
+
+    private Path tests(String id) {
+        return directory.resolve(id + TESTS_EXT);
     }
 
     private List<Path> snapshots(String id) {

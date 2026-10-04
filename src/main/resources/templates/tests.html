@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Tests · ' + ${info.name() ?: modelId})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar}"></header>
+<main class="page wide">
+    <div th:replace="~{fragments/layout :: modelhead('tests')}"></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+
+    <section class="panel">
+        <div class="panel-bar">
+            <h3>Test scenarios</h3>
+            <span class="state ok" th:if="${tests.total() > 0 and tests.failed() == 0}"
+                  th:text="${tests.total() == 1 ? '1 test passed' : 'All ' + tests.total() + ' tests passed'}">All passed</span>
+            <span class="state err" th:if="${tests.failed() > 0}"
+                  th:text="${tests.failed() + ' of ' + tests.total() + ' failed'}">1 of 3 failed</span>
+            <span class="spacer"></span>
+            <a class="tool" th:if="${tests.total() > 0}" th:href="@{/models/{id}/tests/download(id=${modelId})}">Download tests</a>
+            <form method="post" th:action="@{/models/{id}/tests/import(id=${modelId})}" enctype="multipart/form-data" class="form-inline">
+                <label for="tests-file">Import</label>
+                <input id="tests-file" type="file" name="file" accept=".xml,application/xml,text/xml" required>
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+
+        <p class="flash err" th:if="${tests.error() != null}" th:text="${tests.error()}">error</p>
+
+        <p class="empty" th:if="${tests.total() == 0 and tests.error() == null}">No tests yet. On the
+            <a th:href="@{/models/{id}/evaluate(id=${modelId})}">Evaluate</a> tab, enter input values, evaluate, and choose
+            <em>Save as test</em> to keep the inputs and current results. They are re-checked whenever the model changes.</p>
+
+        <div class="table-wrap" th:if="${tests.total() > 0}">
+            <table class="list tests">
+                <thead><tr><th>Test</th><th>Inputs</th><th>Results</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="r : ${tests.results()}" th:classappend="${r.passed()} ? 'passed' : 'failed'">
+                    <td>
+                        <span class="state" th:classappend="${r.passed()} ? 'ok' : 'err'" th:text="${r.scenario().name()}">Test 1</span>
+                        <div><small class="muted" th:text="${r.passed()} ? 'passed' : 'failed'">passed</small></div>
+                    </td>
+                    <td>
+                        <p class="empty" th:if="${r.scenario().inputs().isEmpty()}">all null</p>
+                        <dl class="test-inputs" th:unless="${r.scenario().inputs().isEmpty()}">
+                            <th:block th:each="i : ${r.scenario().inputs()}">
+                                <dt th:text="${i.key}">Input</dt>
+                                <dd><code th:text="${i.value}">42</code></dd>
+                            </th:block>
+                        </dl>
+                        <ul class="messages" th:unless="${r.errors().isEmpty()}">
+                            <li class="msg-error" th:each="e : ${r.errors()}" th:text="${e}">error</li>
+                        </ul>
+                    </td>
+                    <td>
+                        <div class="test-check" th:each="c : ${r.checks()}">
+                            <div class="test-check-head">
+                                <a th:if="${c.decisionId() != null}" th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${c.decisionId()})}" th:text="${c.decision()}">decision</a>
+                                <strong th:if="${c.decisionId() == null}" th:text="${c.decision()}">decision</strong>
+                                <span class="state" th:classappend="${c.passed()} ? 'ok' : 'err'" th:text="${c.passed()} ? 'match' : 'mismatch'">match</span>
+                            </div>
+                            <div class="eval-value">
+                                <small class="muted">expected</small><pre th:text="${c.expected()}">value</pre>
+                            </div>
+                            <div class="eval-value has-error" th:unless="${c.passed()}">
+                                <small class="muted">actual</small><pre th:text="${c.actual()}">value</pre>
+                            </div>
+                            <ul class="messages" th:unless="${c.messages().isEmpty()}">
+                                <li th:each="m : ${c.messages()}" th:classappend="${m.error()} ? 'msg-error' : 'msg-warning'" th:text="${m.text()}">msg</li>
+                            </ul>
+                            <details th:if="${c.table()}" th:with="hits=${c.matchedRules()}">
+                                <summary th:text="${hits.isEmpty() ? 'No rule matched' : (hits.size() == 1 ? 'Matched rule ' : 'Matched rules ') + #strings.listJoin(hits, ', ')}">Matched rules</summary>
+                                <div class="expr-wrap">
+                                    <table th:replace="~{fragments/expression :: decisionTable(${logic[c.decisionId()]})}"></table>
+                                </div>
+                            </details>
+                        </div>
+                    </td>
+                    <td class="test-actions">
+                        <a class="tool" th:href="@{/models/{id}/evaluate(id=${modelId},test=${r.index()})}">Open in evaluator</a>
+                        <form method="post" th:if="${!r.passed() and r.errors().isEmpty()}" class="inline"
+                              th:action="@{/models/{id}/tests/{i}/accept(id=${modelId},i=${r.index()})}">
+                            <button type="submit" title="Make the current results the expected results">Accept results</button>
+                        </form>
+                        <form method="post" class="inline" th:action="@{/models/{id}/tests/{i}/delete(id=${modelId},i=${r.index()})}">
+                            <button type="submit" class="danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="hint top-gap">Tests are stored beside the model as <code th:text="${modelId + '.tests.xml'}">model.tests.xml</code>
+            in the DMN TCK test case format, so they can be run by other DMN engines too. Importing replaces tests with the same name.</p>
+    </section>
+</main>
+</body>
+</html>

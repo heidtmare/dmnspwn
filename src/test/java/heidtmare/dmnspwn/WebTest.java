@@ -180,6 +180,64 @@ class WebTest {
     }
 
     @Test
+    void savesEvaluationsAsTestsAndRerunsThemAfterEdits() throws Exception {
+        String id = models.importXml("dish.dmn", TestModels.xml("dish-selection"));
+        String tests = "/models/" + id + "/tests";
+        mvc.perform(get(tests)).andExpect(status().isOk()).andExpect(content().string(containsString("No tests yet")));
+
+        mvc.perform(post(tests).param("in.Season", "\"Fall\"").param("in.Guest_Count", "3")
+                        .param("in.Guests_With_Children", "").param("decision", "Dish").param("name", "Fall dinner"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("success", "Test saved"));
+        assertThat(storage.resolve(id + ".tests.xml")).exists();
+        mvc.perform(get(tests))
+                .andExpect(content().string(containsString("Fall dinner")))
+                .andExpect(content().string(containsString("1 test passed")))
+                .andExpect(content().string(containsString("class=\"count ok\"")));
+        mvc.perform(post(tests).param("in.Guest_Count", "8 +").param("name", "bad"))
+                .andExpect(flash().attribute("error", containsString("Fix the input values")));
+
+        models.replaceSource(id, models.xml(id).replace("<text>\"Spareribs\"</text></outputEntry>",
+                "<text>\"Ribs\"</text></outputEntry>"));
+        mvc.perform(get("/models/" + id))
+                .andExpect(content().string(containsString("title=\"Failing tests\">1</span>")));
+        mvc.perform(get(tests))
+                .andExpect(content().string(containsString("1 of 1 failed")))
+                .andExpect(content().string(containsString("&quot;Ribs&quot;")));
+
+        mvc.perform(get("/models/" + id + "/evaluate").param("test", "0"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("value=\"&quot;Fall&quot;\"")))
+                .andExpect(content().string(containsString("&quot;Ribs&quot;")));
+
+        mvc.perform(post(tests + "/0/accept")).andExpect(status().is3xxRedirection());
+        mvc.perform(get(tests)).andExpect(content().string(containsString("1 test passed")));
+
+        String xml = mvc.perform(get(tests + "/download"))
+                .andExpect(header().string("Content-Disposition", containsString(id + ".tests.xml")))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(xml).contains("<expected>").contains("Ribs");
+
+        mvc.perform(post(tests + "/0/delete")).andExpect(status().is3xxRedirection());
+        assertThat(storage.resolve(id + ".tests.xml")).doesNotExist();
+        mvc.perform(multipart(tests + "/import").file(new MockMultipartFile("file", "t.xml", "application/xml",
+                        xml.replace("Fall dinner", "Imported").getBytes(StandardCharsets.UTF_8))))
+                .andExpect(flash().attribute("success", "1 test imported"));
+        mvc.perform(get(tests)).andExpect(content().string(containsString("Imported")));
+        mvc.perform(multipart(tests + "/import").file(new MockMultipartFile("file", "t.xml", "application/xml",
+                        "<nope/>".getBytes(StandardCharsets.UTF_8))))
+                .andExpect(flash().attribute("error", containsString("<testCases>")));
+        mvc.perform(post(tests + "/7/delete")).andExpect(flash().attribute("error", "The test no longer exists"));
+
+        java.nio.file.Files.writeString(storage.resolve(id + ".tests.xml"), "not xml");
+        mvc.perform(get("/models/" + id)).andExpect(status().isOk());
+        mvc.perform(get(tests)).andExpect(content().string(containsString("cannot be read")));
+
+        models.delete(id);
+        assertThat(storage.resolve(id + ".tests.xml")).doesNotExist();
+    }
+
+    @Test
     void modeToggleOnlyRedirectsLocally() throws Exception {
         mvc.perform(post("/mode").param("edit", "true").param("back", "//evil.example"))
                 .andExpect(header().string("Location", "/"))

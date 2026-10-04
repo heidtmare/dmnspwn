@@ -16,7 +16,7 @@ mvn test                     # unit + MockMvc tests
 mvn package && java -jar target/dmnspwn-0.1.0-SNAPSHOT.jar
 ```
 
-Models are stored as plain `.dmn` files in `./dmn-models` (two samples are copied there on first start).
+Models are stored as plain `.dmn` files (with their test scenarios as `.tests.xml`) in `./dmn-models` (two samples are copied there on first start).
 Configure with `dmnspwn.storage-directory`, `dmnspwn.seed-samples`, `dmnspwn.history-size`.
 
 ## Loading from and publishing to AWS S3
@@ -70,6 +70,13 @@ ECS/EKS/EC2 roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, 
   function definitions, conditionals, iterators and filters are evaluated; BKMs and decision services are
   callable as functions. An optional ad-hoc FEEL expression can refer to any input, decision, BKM or decision
   service by name. Nothing is written to the model.
+- **Tests** – *Save as test* on the *Evaluate* tab keeps the inputs and the current results of the evaluated
+  decisions as a scenario. The *Tests* tab re-runs every scenario whenever the model changes and shows expected
+  vs. actual values with the matched rules; the tab badge shows the number of failing tests on every page. A
+  failing scenario can be opened in the evaluator or its current results accepted as the new expected values.
+  Scenarios are stored beside the model as `<id>.tests.xml` in the
+  [DMN TCK](https://github.com/dmn-tck/tck) test case format, and can be downloaded or imported (decision test
+  cases only). They are not part of undo history or S3 publishing.
 - **Validation** – duplicate ids, missing names, dangling references, illegal requirements, cycles,
   decision table shape, unknown types, orphan DMNDI shapes.
 

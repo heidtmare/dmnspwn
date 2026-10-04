@@ -172,7 +172,7 @@ public class Feel {
         }
     }
 
-    static boolean isIdentifier(String name) {
+    public static boolean isIdentifier(String name) {
         if (name.isEmpty() || !isNameStart(name.charAt(0))) {
             return false;
         }

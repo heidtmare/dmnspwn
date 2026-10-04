@@ -92,6 +92,18 @@
                         </tbody>
                     </table>
                 </div>
+
+                <form method="post" th:action="@{/models/{id}/tests(id=${modelId})}" class="form-inline top-gap save-test"
+                      th:unless="${result.hasInputErrors() or result.decisions().isEmpty()}">
+                    <input type="hidden" th:each="i : ${saved.inputs()}" th:name="${'in.' + i.key}" th:value="${i.value}">
+                    <input type="hidden" name="decision" th:value="${saved.decision()}">
+                    <label for="test-name">Save as test</label>
+                    <input id="test-name" name="name" placeholder="Name (optional)" autocomplete="off">
+                    <button type="submit">Save</button>
+                </form>
+                <p class="hint" th:unless="${result.hasInputErrors() or result.decisions().isEmpty()}">Saves these inputs and the
+                    results of the evaluated decisions (not dependencies) as expected values on the
+                    <a th:href="@{/models/{id}/tests(id=${modelId})}">Tests</a> tab. A test with the same name is replaced.</p>
             </th:block>
         </section>
     </div>

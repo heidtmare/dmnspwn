@@ -25,15 +25,17 @@ import heidtmare.dmnspwn.store.NotFoundException;
 public class TypeController {
 
     private final ModelService models;
+    private final PageSupport pages;
 
-    public TypeController(ModelService models) {
+    public TypeController(ModelService models, PageSupport pages) {
         this.models = models;
+        this.pages = pages;
     }
 
     @GetMapping
     public String list(@PathVariable String id, Model model) {
         DmnReader reader = models.reader(id);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         model.addAttribute("types", reader.itemDefinitions());
         return "types";
     }
@@ -50,7 +52,7 @@ public class TypeController {
     @GetMapping("/{path}")
     public String edit(@PathVariable String id, @PathVariable String path, Model model) {
         DmnReader reader = models.reader(id);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         model.addAttribute("type", find(reader.itemDefinitions(), path));
         model.addAttribute("path", path);
         return "type";

@@ -39,9 +39,11 @@ import heidtmare.dmnspwn.store.NotFoundException;
 public class ElementController {
 
     private final ModelService models;
+    private final PageSupport pages;
 
-    public ElementController(ModelService models) {
+    public ElementController(ModelService models, PageSupport pages) {
         this.models = models;
+        this.pages = pages;
     }
 
     /** Shape bounds of the element on one diagram, for the layout form. */
@@ -56,7 +58,7 @@ public class ElementController {
     public String view(@PathVariable String id, @PathVariable String elementId, Model model) {
         DmnReader reader = models.reader(id);
         ElementView element = element(reader, elementId);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         model.addAttribute("element", element);
         model.addAttribute("elements", reader.elements());
         model.addAttribute("logicTypes", LogicType.available(reader.document().ns()));
@@ -146,7 +148,7 @@ public class ElementController {
         if (!element.kind().hasLogic()) {
             throw new NotFoundException(element.kind().displayName() + " has no decision logic");
         }
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         model.addAttribute("element", element);
         model.addAttribute("logicTypes", LogicType.available(reader.document().ns()));
         ExpressionView logic = element.logic();

@@ -23,10 +23,12 @@ public class S3Controller {
 
     private final S3Sync sync;
     private final ModelService models;
+    private final PageSupport pages;
 
-    public S3Controller(S3Sync sync, ModelService models) {
+    public S3Controller(S3Sync sync, ModelService models, PageSupport pages) {
         this.sync = sync;
         this.models = models;
+        this.pages = pages;
     }
 
     @GetMapping("/s3")
@@ -53,7 +55,7 @@ public class S3Controller {
     @GetMapping("/models/{id}/s3")
     public String status(@PathVariable String id, Model model) {
         DmnReader reader = models.reader(id);
-        PageSupport.common(model, id, reader, models);
+        pages.common(model, id, reader);
         model.addAttribute("bucket", sync.bucket().bucket());
         model.addAttribute("root", sync.bucket().root());
         model.addAttribute("status", sync.status(id));
