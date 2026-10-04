@@ -1,6 +1,5 @@
 package heidtmare.dmnspwn.s3;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,7 +15,7 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
  * provider chain (environment, {@code ~/.aws}, SSO, container / instance roles).
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "dmnspwn.s3", name = "enabled", havingValue = "true")
+@ConditionalOnS3Enabled
 public class S3Config {
 
     @Bean(destroyMethod = "close")

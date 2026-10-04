@@ -14,7 +14,8 @@ import org.springframework.web.servlet.support.RequestContextUtils;
 
 import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditException;
-import heidtmare.dmnspwn.store.ModelNotFoundException;
+import heidtmare.dmnspwn.s3.S3StoreException;
+import heidtmare.dmnspwn.store.NotFoundException;
 import heidtmare.dmnspwn.xml.DmnFormatException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,31 +55,48 @@ public class WebAdvice {
         return request.getContextPath();
     }
 
-    @ExceptionHandler(ModelNotFoundException.class)
-    public String notFound(ModelNotFoundException e, Model model, HttpServletResponse response) {
-        response.setStatus(HttpStatus.NOT_FOUND.value());
-        model.addAttribute("status", 404);
-        model.addAttribute("message", e.getMessage());
-        return "error";
+    @ExceptionHandler(NotFoundException.class)
+    public String notFound(NotFoundException e, Model model, HttpServletResponse response) {
+        return errorPage(HttpStatus.NOT_FOUND, e.getMessage(), model, response);
     }
 
-    /** Invalid edits on a POST go back to the page they came from with a message. */
-    @ExceptionHandler({DmnEditException.class, DmnFormatException.class, MaxUploadSizeExceededException.class})
-    public String invalid(Exception e, HttpServletRequest request, HttpServletResponse response, Model model) {
-        String message = e instanceof MaxUploadSizeExceededException ? "The uploaded file is too large" : e.getMessage();
+    /** Invalid edits or uploads: a POST goes back to the page it came from with a message. */
+    @ExceptionHandler({DmnEditException.class, DmnFormatException.class})
+    public String invalid(RuntimeException e, HttpServletRequest request, HttpServletResponse response, Model model) {
+        return failed(HttpStatus.BAD_REQUEST, e.getMessage(), request, response, model);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public String tooLarge(HttpServletRequest request, HttpServletResponse response, Model model) {
+        return failed(HttpStatus.BAD_REQUEST, "The uploaded file is too large", request, response, model);
+    }
+
+    /** S3 failures are the remote store's, not the request's: pages that cannot load report a bad gateway. */
+    @ExceptionHandler(S3StoreException.class)
+    public String s3Failed(S3StoreException e, HttpServletRequest request, HttpServletResponse response, Model model) {
+        return failed(HttpStatus.BAD_GATEWAY, e.getMessage(), request, response, model);
+    }
+
+    /**
+     * A failed POST goes back to the page it came from with the message (fetch requests get a 422 fragment);
+     * a failed GET shows the error page with {@code status}.
+     */
+    private static String failed(HttpStatus status, String message, HttpServletRequest request,
+                                 HttpServletResponse response, Model model) {
         if ("POST".equals(request.getMethod())) {
             if (FetchRequests.isFetch(request)) {
-                response.setStatus(HttpStatus.UNPROCESSABLE_CONTENT.value());
-                model.addAttribute("status", 422);
-                model.addAttribute("message", message);
-                return "error";
+                return errorPage(HttpStatus.UNPROCESSABLE_CONTENT, message, model, response);
             }
             FlashMap flash = RequestContextUtils.getOutputFlashMap(request);
             flash.put("error", message);
             return "redirect:" + sameOriginPath(request);
         }
-        response.setStatus(HttpStatus.BAD_REQUEST.value());
-        model.addAttribute("status", 400);
+        return errorPage(status, message, model, response);
+    }
+
+    private static String errorPage(HttpStatus status, String message, Model model, HttpServletResponse response) {
+        response.setStatus(status.value());
+        model.addAttribute("status", status.value());
         model.addAttribute("message", message);
         return "error";
     }

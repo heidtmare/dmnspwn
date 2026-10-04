@@ -169,13 +169,12 @@ public final class DiagramEditor {
                 continue;
             }
             String id = doc.ensureId(c.element(), DmnDocument.idPrefix(c.element().getLocalName()));
-            if (existing.add(id)) {
-                Point[] pts = Geometry.connect(Dmndi.bounds(s).orElseThrow(),
-                        Dmndi.bounds(t).orElseThrow());
+            Optional<Point[]> pts = connect(s, t);
+            if (pts.isPresent() && existing.add(id)) {
                 Element edge = doc.createDi(doc.dmndiNs(), "DMNEdge");
                 edge.setAttribute("id", doc.uniqueId("DMNEdge"));
                 edge.setAttribute("dmnElementRef", id);
-                setWaypoints(edge, pts);
+                setWaypoints(edge, pts.get());
                 diagram.appendChild(edge);
             }
         }
@@ -227,10 +226,14 @@ public final class DiagramEditor {
             Element s = shapes.get(c.sourceId());
             Element t = shapes.get(c.targetId());
             if (s != null && t != null) {
-                setWaypoints(edge, Geometry.connect(Dmndi.bounds(s).orElseThrow(),
-                        Dmndi.bounds(t).orElseThrow()));
+                connect(s, t).ifPresent(pts -> setWaypoints(edge, pts));
             }
         }
+    }
+
+    /** The waypoints joining two shapes, unless either has unreadable bounds. */
+    private static Optional<Point[]> connect(Element source, Element target) {
+        return Dmndi.bounds(source).flatMap(s -> Dmndi.bounds(target).map(t -> Geometry.connect(s, t)));
     }
 
     private Element shape(String elementId, ElementKind kind, Bounds b) {
@@ -240,8 +243,6 @@ public final class DiagramEditor {
         if (kind == ElementKind.DECISION_SERVICE) {
             shape.setAttribute("isCollapsed", "false");
         }
-        Element bounds = doc.createDi(DmnNamespaces.DC, "Bounds");
-        shape.appendChild(bounds);
         setBounds(shape, b);
         if (kind == ElementKind.DECISION_SERVICE) {
             Element line = doc.createDi(doc.dmndiNs(), "DMNDecisionServiceDividerLine");
@@ -266,8 +267,15 @@ public final class DiagramEditor {
         return new Bounds(x, y, kind.width(), kind.height());
     }
 
-    private static void setBounds(Element shape, Bounds b) {
-        Element bounds = anyChildren(shape, "Bounds").stream().findFirst().orElseThrow();
+    /** Writes a shape's bounds, adding the {@code Bounds} element (before label and divider) when it is missing. */
+    private void setBounds(Element shape, Bounds b) {
+        Element bounds = anyChildren(shape, "Bounds").stream().findFirst().orElseGet(() -> {
+            Element created = doc.createDi(DmnNamespaces.DC, "Bounds");
+            Element next = anyChildren(shape, "DMNLabel").stream().findFirst()
+                    .or(() -> anyChildren(shape, "DMNDecisionServiceDividerLine").stream().findFirst()).orElse(null);
+            shape.insertBefore(created, next);
+            return created;
+        });
         bounds.setAttribute("x", Geometry.fmt(b.x()));
         bounds.setAttribute("y", Geometry.fmt(b.y()));
         bounds.setAttribute("width", Geometry.fmt(b.width()));

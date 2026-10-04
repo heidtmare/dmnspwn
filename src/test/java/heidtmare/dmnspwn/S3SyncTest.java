@@ -13,7 +13,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
 
 import heidtmare.dmnspwn.config.DmnProperties;
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.edit.Forms.ElementForm;
 import heidtmare.dmnspwn.s3.S3Bucket;
 import heidtmare.dmnspwn.s3.S3ConflictException;
@@ -78,7 +77,7 @@ class S3SyncTest {
         String id = sync.load("dmn/loan.dmn");
         rename(id, "Locally edited");
         assertThat(sync.status(id).localChanged()).isTrue();
-        assertThatThrownBy(() -> sync.load("dmn/loan.dmn")).isInstanceOf(DmnEditException.class)
+        assertThatThrownBy(() -> sync.load("dmn/loan.dmn")).isInstanceOf(S3StoreException.class)
                 .hasMessageContaining("unpublished local changes");
         sync.pull(id);
         assertThat(models.reader(id).element("Risk_Category").orElseThrow().name()).isEqualTo("Risk Category");

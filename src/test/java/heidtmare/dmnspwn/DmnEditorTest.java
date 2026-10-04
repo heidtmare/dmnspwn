@@ -295,6 +295,21 @@ class DmnEditorTest {
     }
 
     @Test
+    void hidesAndReportsShapesWithMalformedCoordinatesUntilLaidOut() {
+        DmnDocument doc = DmnDocument.parse(TestModels.xml("loan-eligibility")
+                .replace("<dc:Bounds x=\"200\" y=\"150\"", "<dc:Bounds x=\"oops\" y=\"150\""));
+        var view = DiagramBuilder.build(reread(doc), null);
+        assertThat(view.nodes()).noneMatch(n -> "Eligibility_Service".equals(n.elementId()));
+        assertThat(DmnValidator.validate(reread(doc)))
+                .anyMatch(i -> "Eligibility_Service".equals(i.elementId()) && i.message().contains("invalid coordinates"));
+
+        new DmnEditor(doc).diagrams().resetLayout(null);
+        assertThat(DiagramBuilder.build(reread(doc), null).nodes())
+                .anyMatch(n -> "Eligibility_Service".equals(n.elementId()));
+        assertThat(DmnValidator.validate(reread(doc))).noneMatch(i -> i.message().contains("invalid coordinates"));
+    }
+
+    @Test
     void materialisesAutoLayoutAsDmndiOnFirstLayoutEdit() {
         DmnDocument doc = TestModels.dish();
         DmnEditor ed = new DmnEditor(doc);

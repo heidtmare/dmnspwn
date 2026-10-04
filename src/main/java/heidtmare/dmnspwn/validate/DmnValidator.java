@@ -10,6 +10,7 @@ import java.util.Set;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import heidtmare.dmnspwn.diagram.Dmndi;
 import heidtmare.dmnspwn.model.BuiltInTypes;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
@@ -137,6 +138,10 @@ public final class DmnValidator {
                 if (local != null && !reader.nodeElements().containsKey(local)) {
                     issues.add(new Issue(Severity.WARNING, null, null,
                             "Diagram '" + diagram.getAttribute("name") + "' has a shape for unknown element '" + ref + "'"));
+                } else if (Dmndi.hasInvalidBounds(shape)) {
+                    issues.add(new Issue(Severity.WARNING, local, local == null ? ref : reader.nameOf(local),
+                            "Diagram '" + diagram.getAttribute("name")
+                                    + "' has a shape with invalid coordinates; it is not shown until you use Auto-layout"));
                 }
             }
         }

@@ -12,12 +12,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.edit.Forms.Action;
 import heidtmare.dmnspwn.edit.Forms.ItemDefinitionForm;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
 import heidtmare.dmnspwn.store.ModelService;
+import heidtmare.dmnspwn.store.NotFoundException;
 
 /** Item definitions (data types). Types are addressed by index path, e.g. {@code 2} or {@code 2.0}. */
 @Controller
@@ -83,6 +83,6 @@ public class TypeController {
                 return find(item.components(), path);
             }
         }
-        throw new DmnEditException("Unknown data type " + path);
+        throw new NotFoundException("Data type '" + path + "' not found");
     }
 }
