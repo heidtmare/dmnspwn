@@ -241,6 +241,8 @@ svg.drd .node.drop-target .shape { stroke: var(--accent); stroke-width: 3; }
 .drd-tabs { display: flex; gap: .25rem; flex-wrap: wrap; }
 .drd-tabs a { padding: .3rem .7rem; border-radius: 6px; color: var(--muted); }
 .drd-tabs a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.drd-tabs button { border: 0; background: none; padding: .3rem .7rem; border-radius: 6px; color: var(--muted); font: inherit; }
+.drd-tabs button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; margin-top: .6rem; font-size: .8rem; color: var(--muted); align-items: center; }
 .legend span { display: inline-flex; align-items: center; gap: .35rem; }
 .legend .hint { margin: 0; }
@@ -370,6 +372,11 @@ table.dt-edit tbody tr:hover td { background: transparent; }
 .eval-results details { margin-top: .4rem; }
 .eval-results summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .eval-results .expr-wrap { overflow-x: auto; margin-top: .4rem; }
+.eval-results tr.mismatch td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.eval-results tr:target td { background: var(--accent-soft); }
+.eval-value.expected { margin-top: .3rem; }
+.eval-value.expected pre { font-weight: 400; }
+.test-banner { margin: 0 0 1rem; padding: .5rem .75rem; background: var(--surface-2); border-radius: 6px; }
 ul.messages { list-style: none; padding: 0; margin: .4rem 0 0; font-size: .85rem; }
 ul.messages li { padding: .15rem 0 .15rem .5rem; border-left: 3px solid; margin-bottom: .2rem; overflow-wrap: anywhere; }
 ul.messages .msg-error { border-color: var(--danger); color: var(--danger); }

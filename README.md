@@ -3,8 +3,9 @@
 # dmnspwn
 
 A server-side rendered viewer and editor for OMG **Decision Model and Notation** (DMN 1.1 – 1.5) models.
-Java 21, Spring Boot 4.1, Spring MVC + Thymeleaf. No front-end build; the only JavaScript is an optional
-drag-and-drop enhancement for the diagram in edit mode.
+Java 21, Spring Boot 4.1, Spring MVC + Thymeleaf. No front-end build; the only JavaScript is optional
+progressive enhancement (drag-and-drop for the diagram in edit mode, and opening a result from the evaluation
+diagram).
 
 ![dmnspwn demo: browsing a DRD, viewing a decision table, evaluating decisions, saving a test scenario, editing a rule until the test fails, accepting the new results and validating](docs/demo.gif)
 
@@ -69,11 +70,15 @@ ECS/EKS/EC2 roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, 
   tables (all hit policies and aggregations), literal expressions, contexts, relations, lists, invocations,
   function definitions, conditionals, iterators and filters are evaluated; BKMs and decision services are
   callable as functions. An optional ad-hoc FEEL expression can refer to any input, decision, BKM or decision
-  service by name. Nothing is written to the model.
+  service by name. Nothing is written to the model. The results are also drawn on the DRD: every input and
+  evaluated decision shows its value, errors and warnings are outlined, decisions that were not evaluated are
+  dimmed and the requirements the run used are highlighted. Clicking a decision jumps to its result and
+  matched rules.
 - **Tests** – *Save as test* on the *Evaluate* tab keeps the inputs and the current results of the evaluated
   decisions as a scenario. The *Tests* tab re-runs every scenario whenever the model changes and shows expected
   vs. actual values with the matched rules; the tab badge shows the number of failing tests on every page. A
-  failing scenario can be opened in the evaluator or its current results accepted as the new expected values.
+  failing scenario can be opened in the evaluator, which marks the decisions that do not match on the DRD and shows
+  their expected values, or its current results accepted as the new expected values.
   Scenarios are stored beside the model as `<id>.tests.xml` in the
   [DMN TCK](https://github.com/dmn-tck/tck) test case format, and can be downloaded or imported (decision test
   cases only). They are not part of undo history or S3 publishing.

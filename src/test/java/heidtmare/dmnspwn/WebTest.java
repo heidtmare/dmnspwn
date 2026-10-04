@@ -170,7 +170,14 @@ class WebTest {
                 .andExpect(content().string(containsString("&quot;Roastbeef&quot;")))
                 .andExpect(content().string(containsString("&quot;medium party&quot;")))
                 .andExpect(content().string(containsString("Matched rule 2")))
-                .andExpect(content().string(containsString("class=\"dt-hit\"")));
+                .andExpect(content().string(containsString("class=\"dt-hit\"")))
+                .andExpect(content().string(containsString("id=\"result-Dish\"")))
+                .andExpect(content().string(containsString("href=\"#result-Dish\"")))
+                .andExpect(content().string(containsString("href=\"#in-Season\"")))
+                .andExpect(content().string(containsString("class=\"badge-text\"")))
+                .andExpect(content().string(containsString("node node-decision ev ev-ok")))
+                .andExpect(content().string(containsString("node node-decision ev-skipped")))
+                .andExpect(content().string(containsString("edge edge-information active")));
         mvc.perform(get("/models/dish-selection/evaluate").session(session))
                 .andExpect(content().string(containsString("value=\"&quot;Winter&quot;\"")));
         mvc.perform(post("/models/dish-selection/evaluate").param("in.Guest_Count", "8 +"))
@@ -208,7 +215,10 @@ class WebTest {
         mvc.perform(get("/models/" + id + "/evaluate").param("test", "0"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("value=\"&quot;Fall&quot;\"")))
-                .andExpect(content().string(containsString("&quot;Ribs&quot;")));
+                .andExpect(content().string(containsString("&quot;Ribs&quot;")))
+                .andExpect(content().string(containsString("1 of 1 expected results do not match")))
+                .andExpect(content().string(containsString("expected by test")))
+                .andExpect(content().string(containsString("node node-decision ev ev-mismatch")));
 
         mvc.perform(post(tests + "/0/accept")).andExpect(status().is3xxRedirection());
         mvc.perform(get(tests)).andExpect(content().string(containsString("1 test passed")));

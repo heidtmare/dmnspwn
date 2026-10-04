@@ -11,11 +11,12 @@
         <section class="panel">
             <h3>Inputs</h3>
             <form method="post" th:action="@{/models/{id}/evaluate(id=${modelId})}" class="stack" id="eval-form">
+                <input type="hidden" name="drd" th:value="${diagram.diagramId()}">
                 <p class="empty" th:if="${fields.isEmpty()}">This model has no input data.</p>
                 <label th:each="f : ${fields}">
                     <span class="eval-label"><span th:text="${f.name()}">Input</span>
                         <code class="type" th:if="${f.typeRef() != null}" th:text="${f.typeRef()}">number</code></span>
-                    <input class="code" th:name="${'in.' + f.id()}" th:value="${saved.inputs()[f.id()]}"
+                    <input class="code" th:id="${'in-' + f.id()}" th:name="${'in.' + f.id()}" th:value="${saved.inputs()[f.id()]}"
                            th:placeholder="${f.placeholder()}" th:attr="list=${f.suggestions().isEmpty()} ? null : ${'values-' + f.id()}"
                            autocomplete="off" spellcheck="false">
                     <datalist th:unless="${f.suggestions().isEmpty()}" th:id="${'values-' + f.id()}">
@@ -46,6 +47,12 @@
             <h3>Results</h3>
             <p class="empty" th:if="${result == null}">Enter input values and press <em>Evaluate</em>. Nothing is saved to the model.</p>
             <th:block th:if="${result != null}">
+                <p class="test-banner" th:if="${testResult != null}" th:with="r=${testResult}">
+                    Inputs of test <strong th:text="${r.scenario().name()}">Test 1</strong>:
+                    <span class="state" th:classappend="${r.passed()} ? 'ok' : 'err'"
+                          th:text="${r.passed()} ? 'all expected results match' : (${r.checks().?[!passed()].size()} + ' of ' + ${r.checks().size()} + ' expected results do not match')">match</span>
+                    · <a th:href="@{/models/{id}/tests(id=${modelId})}">Tests</a>
+                </p>
                 <ul class="messages" th:if="${result.hasInputErrors()}">
                     <li th:each="i : ${result.inputs()}" th:if="${i.error() != null}" class="msg-error">
                         <strong th:text="${i.name()}">input</strong>: <span th:text="${i.error()}">error</span></li>
@@ -68,7 +75,8 @@
                     <table class="list eval-results">
                         <thead><tr><th>Decision</th><th>Result</th></tr></thead>
                         <tbody>
-                        <tr th:each="d : ${result.decisions()}" th:classappend="${d.requested()} ? '' : 'dependency'">
+                        <tr th:each="d : ${result.decisions()}" th:id="${'result-' + d.id()}" th:with="check=${checks[d.id()]}"
+                            th:classappend="${(d.requested() ? '' : 'dependency') + (check != null and !check.passed() ? ' mismatch' : '')}">
                             <td>
                                 <a th:href="@{/models/{id}/elements/{e}(id=${modelId},e=${d.id()})}" th:text="${d.name()}">decision</a>
                                 <div><small class="muted" th:unless="${d.requested()}">dependency</small></div>
@@ -77,6 +85,10 @@
                                 <div class="eval-value" th:classappend="${d.hasErrors()} ? 'has-error'">
                                     <pre th:text="${d.formatted()}">value</pre>
                                     <small class="muted" th:text="${d.valueType()}">type</small>
+                                </div>
+                                <div class="eval-value expected" th:if="${check != null and !check.passed()}">
+                                    <pre th:text="${check.expected()}">value</pre>
+                                    <small class="muted">expected by test</small>
                                 </div>
                                 <ul class="messages" th:unless="${d.messages().isEmpty()}">
                                     <li th:each="m : ${d.messages()}" th:classappend="${m.error()} ? 'msg-error' : 'msg-warning'" th:text="${m.text()}">msg</li>
@@ -107,6 +119,27 @@
             </th:block>
         </section>
     </div>
+
+    <section class="panel canvas-panel top-gap" th:if="${overlay != null and !diagram.isEmpty()}">
+        <div class="panel-bar">
+            <nav class="drd-tabs" th:if="${diagrams.size() > 1}" aria-label="Diagrams">
+                <button th:each="d : ${diagrams}" type="submit" form="eval-form" name="switchDrd" th:value="${d.id()}"
+                        th:classappend="${d.id() == diagram.diagramId()} ? 'active'" th:text="${d.name()}">DRD</button>
+            </nav>
+            <h3 th:if="${diagrams.size() <= 1}" th:text="${diagram.name()}">DRD</h3>
+        </div>
+        <div class="canvas">
+            <svg th:replace="~{fragments/drd :: drd(${diagram}, false)}"></svg>
+        </div>
+        <div class="legend">
+            <span class="state ok">value</span>
+            <span class="state warn">warning</span>
+            <span class="state err">error or test mismatch</span>
+            <span class="state muted">not evaluated</span>
+            <span class="hint">Highlighted requirements were used · click a decision to see its result and matched rules</span>
+        </div>
+    </section>
 </main>
+<script th:if="${overlay != null}" th:src="@{/js/evaluate.js}" defer></script>
 </body>
 </html>

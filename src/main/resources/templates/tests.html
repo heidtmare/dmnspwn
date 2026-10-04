@@ -75,7 +75,8 @@
                         </div>
                     </td>
                     <td class="test-actions">
-                        <a class="tool" th:href="@{/models/{id}/evaluate(id=${modelId},test=${r.index()})}">Open in evaluator</a>
+                        <a class="tool" th:href="@{/models/{id}/evaluate(id=${modelId},test=${r.index()})}"
+                           title="Evaluate these inputs and show the results and any mismatches on the diagram">Open in evaluator</a>
                         <form method="post" th:if="${!r.passed() and r.errors().isEmpty()}" class="inline"
                               th:action="@{/models/{id}/tests/{i}/accept(id=${modelId},i=${r.index()})}">
                             <button type="submit" title="Make the current results the expected results">Accept results</button>
