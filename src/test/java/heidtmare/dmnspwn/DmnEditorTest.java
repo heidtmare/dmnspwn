@@ -342,4 +342,84 @@ class DmnEditorTest {
         assertThat(reader.info().version()).isEqualTo("1.5");
         assertThat(reader.element("a").orElseThrow().typeRef()).isEqualTo("number");
     }
+
+    @Test
+    void reordersAndDeletesRulesParametersAndComponents() {
+        DmnDocument doc = TestModels.loan();
+        DmnEditor ed = new DmnEditor(doc);
+        for (String action : List.of("moveRuleUp:1", "moveRuleUp:0", "moveRuleDown:2", "moveRuleDown:5", "deleteRule:4")) {
+            DecisionTableForm f = new DecisionTableForm();
+            f.setHitPolicy("UNIQUE");
+            f.setAction(action);
+            ed.tables().save("Risk_Category", f);
+        }
+        Element table = ed.logic().expression("Risk_Category").orElseThrow();
+        assertThat(doc.children(table, "rule")).extracting(r -> r.getAttribute("id"))
+                .containsExactly("DT_Risk_r2", "DT_Risk_r1", "DT_Risk_r4", "DT_Risk_r3", "DT_Risk_r6");
+
+        for (String action : List.of("moveParameterUp:2", "moveParameterUp:0", "deleteParameter:0")) {
+            ParametersForm f = new ParametersForm();
+            f.setAction(action);
+            ed.logic().saveParameters("Installment_Calculation", f);
+        }
+        assertThat(reread(doc).element("Installment_Calculation").orElseThrow().parameters())
+                .extracting(p -> p.name()).containsExactly("term", "rate");
+
+        ItemDefinitionForm type = new ItemDefinitionForm();
+        type.setName("tLoanOffer");
+        type.setAction("moveComponentUp:1");
+        ed.types().save("2", type);
+        assertThat(reread(doc).itemDefinitions().get(2).components()).extracting(c -> c.name())
+                .containsExactly("installment", "amount");
+        type.setAction("deleteComponent:0");
+        ed.types().save("2", type);
+        assertThat(reread(doc).itemDefinitions().get(2).components()).extracting(c -> c.name())
+                .containsExactly("amount");
+    }
+
+    @Test
+    void addressesNestedTypesByPathAndDeletesThem() {
+        DmnDocument doc = TestModels.loan();
+        DmnEditor ed = new DmnEditor(doc);
+        ItemDefinitionForm amount = new ItemDefinitionForm();
+        amount.setName("amount");
+        amount.setAction("addComponent");
+        ed.types().save("2.0", amount);
+
+        assertThat(ed.types().byPath("2.0.0").getAttribute("name")).isEqualTo("field1");
+        var nested = reread(doc).itemDefinitions().get(2).components().getFirst();
+        assertThat(nested.typeRef()).isNull();
+        assertThat(nested.components()).singleElement().satisfies(c -> {
+            assertThat(c.path()).isEqualTo("2.0.0");
+            assertThat(c.typeRef()).isEqualTo("string");
+        });
+        for (String bad : List.of("3", "2.5", "2.0.0.0", "x", "", "-1")) {
+            assertThatThrownBy(() -> ed.types().byPath(bad)).isInstanceOf(DmnEditException.class)
+                    .hasMessageContaining("Unknown data type");
+        }
+
+        ed.types().delete("2.0.0");
+        assertThat(reread(doc).itemDefinitions().get(2).components().getFirst().components()).isEmpty();
+        ed.types().delete("0");
+        DmnReader reader = reread(doc);
+        assertThat(reader.itemDefinitions()).extracting(t -> t.name()).containsExactly("tEligibility", "tLoanOffer");
+        assertThat(DmnValidator.validate(reader)).anyMatch(i -> i.message().equals("Unknown type 'tRiskCategory'"));
+    }
+
+    @Test
+    void offersConditionalsIteratorsAndFiltersFromDmn14() {
+        assertThat(LogicType.available(DmnNamespaces.DMN_1_3)).doesNotContain(LogicType.CONDITIONAL, LogicType.FILTER);
+        assertThat(LogicType.available(DmnNamespaces.DMN_1_1)).doesNotContain(LogicType.FOR);
+        assertThat(LogicType.available(DmnNamespaces.DMN_1_4)).contains(LogicType.CONDITIONAL, LogicType.FOR,
+                LogicType.SOME, LogicType.EVERY, LogicType.FILTER);
+        assertThat(LogicType.available(DmnNamespaces.DMN_1_5)).containsExactly(LogicType.values());
+
+        DmnDocument doc = TestModels.dish();
+        DmnEditor ed = new DmnEditor(doc);
+        assertThatThrownBy(() -> ed.logic().setType("Dish", LogicType.CONDITIONAL))
+                .isInstanceOf(DmnEditException.class).hasMessageContaining("requires DMN 1.4");
+        ed.converter().toLatest();
+        ed.logic().setType("Dish", LogicType.CONDITIONAL);
+        assertThat(reread(doc).element("Dish").orElseThrow().logic()).isInstanceOf(ExpressionView.Conditional.class);
+    }
 }
