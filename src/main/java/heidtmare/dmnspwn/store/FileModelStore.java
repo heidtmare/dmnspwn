@@ -1,11 +1,14 @@
 package heidtmare.dmnspwn.store;
 
 import static heidtmare.dmnspwn.store.ModelStore.requireValidId;
+import static heidtmare.dmnspwn.store.StoreLayout.HISTORY_DIR;
+import static heidtmare.dmnspwn.store.StoreLayout.META_DIR;
+import static heidtmare.dmnspwn.store.StoreLayout.META_EXT;
+import static heidtmare.dmnspwn.store.StoreLayout.MODEL_EXT;
+import static heidtmare.dmnspwn.store.StoreLayout.TESTS_EXT;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.io.UncheckedIOException;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -20,7 +23,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -28,29 +30,26 @@ import java.util.stream.Stream;
 import heidtmare.dmnspwn.config.DmnProperties;
 
 /**
- * Stores each model as {@code <id>.dmn} in a directory, with previous versions under {@code .history/<id>/} for undo
- * and its test scenarios beside it as {@code <id>.tests.xml}. Conditional writes are checked within this process
- * only, so the directory must not be shared by several instances.
+ * Stores models in a directory, laid out as described in {@link StoreLayout}. Conditional writes are checked within
+ * this process only, so the directory must not be shared by several instances.
  */
 public class FileModelStore implements ModelStore {
 
-    private static final String EXT = ".dmn";
-    private static final String TESTS_EXT = ".tests.xml";
-    /** Snapshot file names: {@code <millis>-<nanos>.dmn}. Anything else in a history directory is ignored. */
-    private static final Pattern SNAPSHOT = Pattern.compile("\\d+-\\d+\\.dmn");
+    /** Snapshot names written by earlier versions: {@code <millis>-<nanos>.dmn}; renumbered when first listed. */
+    private static final Pattern LEGACY_SNAPSHOT = Pattern.compile("(\\d+)-(\\d+)\\.dmn");
 
     private final Path directory;
     private final Path history;
     private final Path meta;
     private final int historySize;
-    private final ConcurrentHashMap<String, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final KeyedLocks locks = new KeyedLocks();
     /** Writes per file through this store, so that a stamp changes even when time and size do not. */
     private final ConcurrentHashMap<Path, Long> writes = new ConcurrentHashMap<>();
 
     public FileModelStore(DmnProperties properties) {
         this.directory = properties.storageDirectory().toAbsolutePath().normalize();
-        this.history = directory.resolve(".history");
-        this.meta = directory.resolve(".meta");
+        this.history = directory.resolve(HISTORY_DIR);
+        this.meta = directory.resolve(META_DIR);
         this.historySize = Math.max(0, properties.historySize());
         try {
             Files.createDirectories(history);
@@ -68,10 +67,7 @@ public class FileModelStore implements ModelStore {
     @Override
     public List<Entry> list() {
         try (Stream<Path> files = Files.list(directory)) {
-            return files.filter(p -> p.getFileName().toString().endsWith(EXT))
-                    .map(p -> p.getFileName().toString())
-                    .map(n -> n.substring(0, n.length() - EXT.length()))
-                    .filter(ModelStore::isValid)
+            return files.flatMap(p -> StoreLayout.idOf(p.getFileName().toString(), MODEL_EXT).stream())
                     .sorted()
                     .flatMap(id -> stampOf(file(id)).map(s -> new Entry(id, s)).stream())
                     .toList();
@@ -96,16 +92,8 @@ public class FileModelStore implements ModelStore {
         locked(id, () -> {
             Path target = file(id);
             check(target, current, "Model '" + id + "'");
-            try {
-                if (snapshot && current != null && historySize > 0) {
-                    Path dir = history.resolve(id);
-                    Files.createDirectories(dir);
-                    Files.writeString(dir.resolve(System.currentTimeMillis() + "-" + System.nanoTime() + EXT),
-                            current.content(), StandardCharsets.UTF_8);
-                    prune(dir);
-                }
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
+            if (snapshot && current != null && historySize > 0) {
+                keep(id, current.content());
             }
             replace(target, xml);
             return null;
@@ -117,11 +105,9 @@ public class FileModelStore implements ModelStore {
         requireValidId(id);
         locked(id, () -> {
             try {
-                Files.deleteIfExists(file(id));
-                writes.merge(file(id), 1L, Long::sum);
-                Files.deleteIfExists(meta.resolve(id + ".properties"));
-                Files.deleteIfExists(tests(id));
-                writes.merge(tests(id), 1L, Long::sum);
+                deleteFile(file(id));
+                deleteFile(tests(id));
+                Files.deleteIfExists(metaFile(id));
                 Path dir = history.resolve(id);
                 if (Files.isDirectory(dir)) {
                     try (Stream<Path> files = Files.list(dir)) {
@@ -162,11 +148,9 @@ public class FileModelStore implements ModelStore {
 
     @Override
     public void deleteSnapshot(String id, Snapshot snapshot) {
-        if (!SNAPSHOT.matcher(snapshot.name()).matches()) {
-            throw new IllegalArgumentException("Not a snapshot: " + snapshot.name());
-        }
+        String name = StoreLayout.requireSnapshot(snapshot.name());
         try {
-            Files.deleteIfExists(history.resolve(requireValidId(id)).resolve(snapshot.name()));
+            Files.deleteIfExists(history.resolve(requireValidId(id)).resolve(name));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -186,8 +170,7 @@ public class FileModelStore implements ModelStore {
             check(file, current, "The tests of '" + id + "'");
             if (xml == null) {
                 try {
-                    Files.deleteIfExists(file);
-                    writes.merge(file, 1L, Long::sum);
+                    deleteFile(file);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -200,7 +183,7 @@ public class FileModelStore implements ModelStore {
 
     @Override
     public Properties readMeta(String id) {
-        return readProperties(meta.resolve(requireValidId(id) + ".properties"));
+        return readProperties(metaFile(requireValidId(id)));
     }
 
     @Override
@@ -208,11 +191,7 @@ public class FileModelStore implements ModelStore {
         Map<String, Properties> result = new TreeMap<>();
         try (Stream<Path> files = Files.list(meta)) {
             for (Path p : files.toList()) {
-                String name = p.getFileName().toString();
-                String id = name.endsWith(".properties") ? name.substring(0, name.length() - 11) : "";
-                if (ModelStore.isValid(id)) {
-                    result.put(id, readProperties(p));
-                }
+                StoreLayout.idOf(p.getFileName().toString(), META_EXT).ifPresent(id -> result.put(id, readProperties(p)));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -222,14 +201,12 @@ public class FileModelStore implements ModelStore {
 
     @Override
     public void writeMeta(String id, Properties props) {
-        Path file = meta.resolve(requireValidId(id) + ".properties");
+        Path file = metaFile(requireValidId(id));
         try {
             if (props.isEmpty()) {
                 Files.deleteIfExists(file);
-                return;
-            }
-            try (Writer out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-                props.store(out, null);
+            } else {
+                Files.writeString(file, StoreLayout.encode(props), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -237,21 +214,30 @@ public class FileModelStore implements ModelStore {
     }
 
     private <T> T locked(String id, Supplier<T> action) {
-        ReentrantLock lock = locks.computeIfAbsent(id, k -> new ReentrantLock());
-        lock.lock();
-        try {
-            return action.get();
-        } finally {
-            lock.unlock();
-        }
+        return locks.locked(id, action);
     }
 
     /** Fails unless {@code file} is still at {@code current} (or, for null, does not exist). */
     private void check(Path file, Stored current, String what) {
         Optional<Stamp> actual = stampOf(file);
         if (current == null ? actual.isPresent() : !actual.equals(Optional.of(current.stamp()))) {
-            throw new StoreConflictException(current == null ? what + " already exists"
-                    : what + " was changed by someone else");
+            throw StoreLayout.conflict(what, current);
+        }
+    }
+
+    /** Keeps {@code content} as the newest snapshot, numbered after the previous one, and prunes the oldest. */
+    private void keep(String id, String content) {
+        try {
+            Path dir = history.resolve(id);
+            Files.createDirectories(dir);
+            List<Path> existing = snapshotsIn(dir);
+            long revision = existing.isEmpty() ? 1 : StoreLayout.revisionOf(existing.getLast().getFileName().toString()) + 1;
+            Files.writeString(dir.resolve(StoreLayout.snapshotName(revision)), content, StandardCharsets.UTF_8);
+            for (int i = 0; i < existing.size() + 1 - historySize; i++) {
+                Files.deleteIfExists(existing.get(i));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -285,7 +271,7 @@ public class FileModelStore implements ModelStore {
 
     private void replace(Path target, String content) {
         try {
-            Path tmp = Files.createTempFile(directory, ".tmp-", EXT);
+            Path tmp = Files.createTempFile(directory, ".tmp-", MODEL_EXT);
             Files.writeString(tmp, content, StandardCharsets.UTF_8);
             try {
                 Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -298,24 +284,32 @@ public class FileModelStore implements ModelStore {
         }
     }
 
+    private void deleteFile(Path file) throws IOException {
+        Files.deleteIfExists(file);
+        writes.merge(file, 1L, Long::sum);
+    }
+
     private static Properties readProperties(Path file) {
-        Properties props = new Properties();
-        if (Files.isRegularFile(file)) {
-            try (Reader in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-                props.load(in);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+        if (!Files.isRegularFile(file)) {
+            return new Properties();
         }
-        return props;
+        try {
+            return StoreLayout.decode(Files.readString(file, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private Path file(String id) {
-        return directory.resolve(id + EXT);
+        return directory.resolve(id + MODEL_EXT);
     }
 
     private Path tests(String id) {
         return directory.resolve(id + TESTS_EXT);
+    }
+
+    private Path metaFile(String id) {
+        return meta.resolve(id + META_EXT);
     }
 
     private List<Path> snapshots(String id) {
@@ -326,38 +320,56 @@ public class FileModelStore implements ModelStore {
         if (!Files.isDirectory(dir)) {
             return List.of();
         }
-        try {
-            return snapshotsIn(dir);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return locked(id, () -> {
+            try {
+                return snapshotsIn(dir);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
     }
 
-    /** The snapshot files in a history directory, oldest first. */
+    /** The snapshot files in a history directory, oldest first (their names sort as text). */
     private static List<Path> snapshotsIn(Path dir) throws IOException {
+        migrateLegacySnapshots(dir);
         try (Stream<Path> files = Files.list(dir)) {
-            return files.filter(p -> SNAPSHOT.matcher(p.getFileName().toString()).matches())
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString(), FileModelStore::compareSnapshots))
+            return files.filter(p -> StoreLayout.isSnapshot(p.getFileName().toString()))
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
                     .toList();
         }
     }
 
-    private static int compareSnapshots(String a, String b) {
-        String[] pa = a.replace(EXT, "").split("-");
-        String[] pb = b.replace(EXT, "").split("-");
-        for (int i = 0; i < Math.min(pa.length, pb.length); i++) {
-            int c = Long.compare(Long.parseLong(pa[i]), Long.parseLong(pb[i]));
-            if (c != 0) {
-                return c;
+    /**
+     * Renames snapshots written by earlier versions ({@code <millis>-<nanos>.dmn}) to revision numbers. They are
+     * older than any numbered snapshot, so all snapshots are renumbered from 1 in order: legacy ones first.
+     */
+    private static void migrateLegacySnapshots(Path dir) throws IOException {
+        List<Path> legacy;
+        List<Path> numbered;
+        try (Stream<Path> files = Files.list(dir)) {
+            List<Path> all = files.toList();
+            legacy = all.stream().filter(p -> LEGACY_SNAPSHOT.matcher(p.getFileName().toString()).matches())
+                    .sorted(Comparator.comparing((Path p) -> legacyPart(p, 1)).thenComparing(p -> legacyPart(p, 2)))
+                    .toList();
+            if (legacy.isEmpty()) {
+                return;
             }
+            numbered = all.stream().filter(p -> StoreLayout.isSnapshot(p.getFileName().toString()))
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString())).toList();
         }
-        return 0;
+        List<Path> ordered = Stream.concat(legacy.stream(), numbered.stream()).toList();
+        // Two steps, so that no rename replaces a snapshot that is still to be renamed.
+        Path[] staged = new Path[ordered.size()];
+        for (int i = 0; i < ordered.size(); i++) {
+            staged[i] = Files.move(ordered.get(i), dir.resolve(".migrating-" + i));
+        }
+        for (int i = 0; i < staged.length; i++) {
+            Files.move(staged[i], dir.resolve(StoreLayout.snapshotName(i + 1)));
+        }
     }
 
-    private void prune(Path dir) throws IOException {
-        List<Path> all = snapshotsIn(dir);
-        for (int i = 0; i < all.size() - historySize; i++) {
-            Files.deleteIfExists(all.get(i));
-        }
+    private static long legacyPart(Path p, int group) {
+        var m = LEGACY_SNAPSHOT.matcher(p.getFileName().toString());
+        return m.matches() ? Long.parseLong(m.group(group)) : 0;
     }
 }

@@ -26,7 +26,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.Scope;
 import heidtmare.dmnspwn.eval.Values;
@@ -191,7 +190,7 @@ public final class TestCases {
     private static Val value(Feel feel, Scenario s, String element, String text) {
         Feel.Result r = feel.evaluate(text == null || text.isBlank() ? "null" : text, Scope.empty());
         if (r.failed() || !r.warnings().isEmpty()) {
-            throw new DmnEditException("Test '" + s.name() + "', " + element + ": "
+            throw new InvalidScenarioException("Test '" + s.name() + "', " + element + ": "
                     + (r.failed() ? r.error() : String.join("; ", r.warnings())));
         }
         return r.value();
@@ -225,19 +224,13 @@ public final class TestCases {
                     case ValDateTime t -> "dateTime";
                     case ValDayTimeDuration d -> "duration";
                     case ValYearMonthDuration d -> "duration";
-                    default -> throw new DmnEditException(
+                    default -> throw new InvalidScenarioException(
                             "A " + Values.typeName(v) + " value cannot be stored in a test: " + Values.format(v));
                 };
                 value.setAttributeNS(XSI, "xsi:type", "xsd:" + type);
-                value.setTextContent(v instanceof ValString s ? s.value() : unwrap(Values.format(v)));
+                value.setTextContent(Values.literal(v));
             }
         }
-    }
-
-    /** {@code date("2024-01-31")} → {@code 2024-01-31}; plain literals are returned as they are. */
-    private static String unwrap(String formatted) {
-        int open = formatted.indexOf("(\"");
-        return open < 0 ? formatted : formatted.substring(open + 2, formatted.length() - 2);
     }
 
     private static Element append(Element parent, String localName) {

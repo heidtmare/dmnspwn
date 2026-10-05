@@ -2,15 +2,14 @@ package heidtmare.dmnspwn.store;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -38,7 +37,9 @@ public class ModelService {
 
     private final ModelStore store;
     /** Serializes changes of one model within this instance, so that they do not conflict with each other. */
-    private final ConcurrentHashMap<String, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final KeyedLocks locks = new KeyedLocks();
+    /** The models this thread is changing in {@link #atomically}, to recognize nested calls. */
+    private final ThreadLocal<Set<String>> changing = ThreadLocal.withInitial(HashSet::new);
     /** What the home page shows of each model, kept until the model changes so listing does not parse them all. */
     private final ConcurrentHashMap<String, Summary> summaries = new ConcurrentHashMap<>();
 
@@ -53,7 +54,6 @@ public class ModelService {
     public List<ModelSummary> list() {
         List<Entry> entries = store.list();
         summaries.keySet().retainAll(entries.stream().map(Entry::id).toList());
-        Map<String, Properties> meta = store.readAllMeta();
         List<ModelSummary> result = new ArrayList<>();
         for (Entry entry : entries) {
             String id = entry.id();
@@ -66,9 +66,8 @@ public class ModelService {
                 s = summarize(id, stored.get());
                 summaries.put(id, s);
             }
-            Properties props = meta.get(id);
             result.add(new ModelSummary(id, s.name(), s.version(), s.namespace(), s.decisions(), s.elements(),
-                    s.stamp().modified(), s.error(), props == null ? null : props.getProperty("s3.key")));
+                    s.stamp().modified(), s.error()));
         }
         result.sort(Comparator.comparing(ModelSummary::updated).reversed());
         return result;
@@ -89,6 +88,13 @@ public class ModelService {
 
     public String xml(String id) {
         return current(id).content();
+    }
+
+    /** Fails with {@link ModelNotFoundException} unless the model exists; cheaper than reading it. */
+    public void requireExists(String id) {
+        if (!store.exists(id)) {
+            throw new ModelNotFoundException(id);
+        }
     }
 
     /** The model's content and version. */
@@ -129,26 +135,28 @@ public class ModelService {
      * re-read what it changes). Calls may be nested; only the outermost one repeats.
      */
     public <T> T atomically(String id, Supplier<T> action) {
-        ReentrantLock lock = locks.computeIfAbsent(id, k -> new ReentrantLock());
-        lock.lock();
-        try {
-            if (lock.getHoldCount() > 1) {
-                return action.get();
-            }
-            for (int attempt = 1; ; attempt++) {
-                try {
-                    return action.get();
-                } catch (StoreConflictException e) {
-                    if (attempt >= ATTEMPTS) {
-                        throw new StoreConflictException(
-                                "'" + id + "' is being changed by someone else at the same time; try again.");
-                    }
-                    pause(attempt);
-                }
-            }
-        } finally {
-            lock.unlock();
+        ModelStore.requireValidId(id);
+        if (changing.get().contains(id)) {
+            return action.get();
         }
+        return locks.locked(id, () -> {
+            changing.get().add(id);
+            try {
+                for (int attempt = 1; ; attempt++) {
+                    try {
+                        return action.get();
+                    } catch (StoreConflictException e) {
+                        if (attempt >= ATTEMPTS) {
+                            throw new StoreConflictException(
+                                    "'" + id + "' is being changed by someone else at the same time; try again.");
+                        }
+                        pause(attempt);
+                    }
+                }
+            } finally {
+                changing.get().remove(id);
+            }
+        });
     }
 
     private static void pause(int attempt) {

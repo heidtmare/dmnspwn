@@ -9,11 +9,11 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.eval.Evaluation;
 import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.model.DmnReader;
+import heidtmare.dmnspwn.scenario.InvalidScenarioException;
 import heidtmare.dmnspwn.scenario.Scenario;
 import heidtmare.dmnspwn.scenario.ScenarioRunner;
 import heidtmare.dmnspwn.scenario.TestCases;
@@ -97,10 +97,10 @@ class ScenarioTest {
     @Test
     void refusesValuesATestFileCannotHold() {
         Scenario s = new Scenario("f", map("x", "function(a) a"), map("y", "1"));
-        assertThatThrownBy(() -> TestCases.write("m.dmn", List.of(s), FEEL)).isInstanceOf(DmnEditException.class);
+        assertThatThrownBy(() -> TestCases.write("m.dmn", List.of(s), FEEL)).isInstanceOf(InvalidScenarioException.class);
         Scenario broken = new Scenario("b", map("x", "1 +"), map("y", "1"));
         assertThatThrownBy(() -> TestCases.write("m.dmn", List.of(broken), FEEL))
-                .isInstanceOf(DmnEditException.class).hasMessageContaining("Test 'b', x");
+                .isInstanceOf(InvalidScenarioException.class).hasMessageContaining("Test 'b', x");
     }
 
     @Test

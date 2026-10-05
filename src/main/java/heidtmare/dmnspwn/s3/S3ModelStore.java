@@ -1,11 +1,13 @@
 package heidtmare.dmnspwn.s3;
 
 import static heidtmare.dmnspwn.store.ModelStore.requireValidId;
+import static heidtmare.dmnspwn.store.StoreLayout.HISTORY_DIR;
+import static heidtmare.dmnspwn.store.StoreLayout.META_DIR;
+import static heidtmare.dmnspwn.store.StoreLayout.META_EXT;
+import static heidtmare.dmnspwn.store.StoreLayout.MODEL_EXT;
+import static heidtmare.dmnspwn.store.StoreLayout.TESTS_EXT;
 
 import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,16 +15,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import heidtmare.dmnspwn.config.DmnProperties;
+import heidtmare.dmnspwn.store.LruCache;
 import heidtmare.dmnspwn.store.ModelStore;
-import heidtmare.dmnspwn.store.StoreConflictException;
+import heidtmare.dmnspwn.store.StoreLayout;
 
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -39,14 +40,8 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 /**
- * Keeps models in an S3 bucket under the storage prefix, so that any number of instances can share them:
- * <pre>
- *   &lt;prefix&gt;&lt;id&gt;.dmn                       the model (user metadata {@code revision})
- *   &lt;prefix&gt;&lt;id&gt;.tests.xml                 its test scenarios
- *   &lt;prefix&gt;.history/&lt;id&gt;/&lt;revision&gt;.dmn   previous versions, for undo
- *   &lt;prefix&gt;.meta/&lt;id&gt;.properties         metadata such as the S3 link
- * </pre>
- * Models and test files are written with S3 conditional writes ({@code If-Match} on the ETag that was read, or
+ * Keeps models in an S3 bucket under the storage prefix, so that any number of instances can share them, laid out
+ * as described in {@link StoreLayout}; each model object carries its revision as user metadata. Models and test files are written with S3 conditional writes ({@code If-Match} on the ETag that was read, or
  * {@code If-None-Match: *} for a new file). Each model write increments its revision, and the previous version is
  * kept under that revision's number, so the history is ordered without relying on clocks. Contents are cached by
  * ETag and revalidated with a conditional GET on every read.
@@ -55,10 +50,9 @@ public class S3ModelStore implements ModelStore {
 
     private static final Logger log = LoggerFactory.getLogger(S3ModelStore.class);
 
-    private static final String EXT = ".dmn";
-    private static final String TESTS_EXT = ".tests.xml";
     private static final String REVISION = "revision";
-    private static final Pattern SNAPSHOT = Pattern.compile("\\d{12}\\.dmn");
+    /** Objects whose content is kept for revalidation; the least recently read are forgotten. */
+    private static final int CACHE_SIZE = 1000;
 
     private final S3Client s3;
     private final String bucket;
@@ -66,7 +60,7 @@ public class S3ModelStore implements ModelStore {
     private final int historySize;
     private final long maxObjectSize;
     /** The last content read of each object, by key; revalidated with its ETag. */
-    private final ConcurrentHashMap<String, Stored> cache = new ConcurrentHashMap<>();
+    private final LruCache<String, Stored> cache = new LruCache<>(CACHE_SIZE);
 
     public S3ModelStore(S3Client s3, DmnProperties properties) {
         this.s3 = s3;
@@ -85,13 +79,8 @@ public class S3ModelStore implements ModelStore {
     public List<Entry> list() {
         List<Entry> entries = new ArrayList<>();
         listing(root, true, o -> {
-            String name = o.key().substring(root.length());
-            if (name.endsWith(EXT)) {
-                String id = name.substring(0, name.length() - EXT.length());
-                if (ModelStore.isValid(id)) {
-                    entries.add(new Entry(id, new Stamp(o.eTag(), o.lastModified())));
-                }
-            }
+            StoreLayout.idOf(o.key().substring(root.length()), MODEL_EXT)
+                    .ifPresent(id -> entries.add(new Entry(id, new Stamp(o.eTag(), o.lastModified()))));
         });
         return entries;
     }
@@ -130,14 +119,14 @@ public class S3ModelStore implements ModelStore {
             // An object replaced outside the application has lost its revision; never number it below the history.
             history = snapshotKeys(id);
             if (!history.isEmpty()) {
-                revision = Math.max(revision, number(history.getLast()) + 1);
+                revision = Math.max(revision, StoreLayout.revisionOf(name(history.getLast())) + 1);
             }
         }
-        put(model(id), xml, current, Map.of(REVISION, Long.toString(revision + 1)), "Model '" + id + "'");
+        putConditionally(model(id), xml, current, Map.of(REVISION, Long.toString(revision + 1)), "Model '" + id + "'");
         if (keep) {
-            String key = history(id) + "%012d".formatted(revision) + EXT;
+            String key = history(id) + StoreLayout.snapshotName(revision);
             try {
-                put(key, current.content(), null, Map.of(), null);
+                put(key, current.content(), Map.of());
                 List<String> all = new ArrayList<>(history);
                 all.remove(key);
                 all.add(key);
@@ -179,15 +168,12 @@ public class S3ModelStore implements ModelStore {
         String key = keys.getLast();
         Optional<Stored> stored = get(key);
         cache.remove(key);
-        return stored.map(s -> new Snapshot(key.substring(key.lastIndexOf('/') + 1), s.content()));
+        return stored.map(s -> new Snapshot(name(key), s.content()));
     }
 
     @Override
     public void deleteSnapshot(String id, Snapshot snapshot) {
-        if (!SNAPSHOT.matcher(snapshot.name()).matches()) {
-            throw new IllegalArgumentException("Not a snapshot: " + snapshot.name());
-        }
-        remove(history(requireValidId(id)) + snapshot.name());
+        remove(history(requireValidId(id)) + StoreLayout.requireSnapshot(snapshot.name()));
     }
 
     @Override
@@ -205,28 +191,27 @@ public class S3ModelStore implements ModelStore {
             }
             return;
         }
-        put(key, xml, current, Map.of(), "The tests of '" + id + "'");
+        putConditionally(key, xml, current, Map.of(), "The tests of '" + id + "'");
     }
 
     @Override
     public Properties readMeta(String id) {
-        return get(meta(requireValidId(id))).map(s -> properties(s.content())).orElseGet(Properties::new);
+        return get(meta(requireValidId(id))).map(s -> StoreLayout.decode(s.content())).orElseGet(Properties::new);
     }
 
     @Override
     public Map<String, Properties> readAllMeta() {
-        String dir = root + ".meta/";
+        String dir = root + META_DIR + "/";
         Map<String, Properties> result = new TreeMap<>();
         listing(dir, false, o -> {
-            String name = o.key().substring(dir.length());
-            String id = name.endsWith(".properties") ? name.substring(0, name.length() - 11) : "";
-            if (!ModelStore.isValid(id)) {
+            Optional<String> id = StoreLayout.idOf(o.key().substring(dir.length()), META_EXT);
+            if (id.isEmpty()) {
                 return;
             }
             Stored cached = cache.get(o.key());
             Optional<Stored> stored = cached != null && cached.stamp().tag().equals(o.eTag())
                     ? Optional.of(cached) : get(o.key());
-            stored.ifPresent(s -> result.put(id, properties(s.content())));
+            stored.ifPresent(s -> result.put(id.get(), StoreLayout.decode(s.content())));
         });
         return result;
     }
@@ -238,13 +223,7 @@ public class S3ModelStore implements ModelStore {
             remove(key);
             return;
         }
-        StringWriter out = new StringWriter();
-        try {
-            props.store(out, null);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        put(key, out.toString(), null, Map.of(), null);
+        put(key, StoreLayout.encode(props), Map.of());
     }
 
     /** Reads an object, reusing the cached content when its ETag is unchanged. */
@@ -282,32 +261,49 @@ public class S3ModelStore implements ModelStore {
         }
     }
 
+    /** Uploads an object, replacing whatever is there (last write wins). */
+    private void put(String key, String content, Map<String, String> metadata) {
+        try {
+            send(putRequest(key, metadata), content);
+        } catch (SdkException e) {
+            throw failed(e, "write", key);
+        }
+    }
+
     /**
-     * Uploads an object. With {@code what} the write is conditional: on {@code current}'s ETag, or for a null
-     * {@code current} on the object not existing yet.
+     * Uploads an object, of which {@code what} is shown in messages, if it is still at {@code current}'s ETag, or
+     * for a null {@code current}, if it does not exist yet.
+     *
+     * @throws heidtmare.dmnspwn.store.StoreConflictException when the object changed or exists
      */
-    private void put(String key, String content, Stored current, Map<String, String> metadata, String what) {
-        PutObjectRequest.Builder request = PutObjectRequest.builder().bucket(bucket).key(key)
-                .contentType("application/xml; charset=utf-8").metadata(metadata);
-        if (what != null) {
-            if (current != null) {
-                request.ifMatch(current.stamp().tag());
-            } else {
-                request.ifNoneMatch("*");
-            }
+    private void putConditionally(String key, String content, Stored current, Map<String, String> metadata,
+                                  String what) {
+        PutObjectRequest.Builder request = putRequest(key, metadata);
+        if (current != null) {
+            request.ifMatch(current.stamp().tag());
+        } else {
+            request.ifNoneMatch("*");
         }
         try {
-            s3.putObject(request.build(), RequestBody.fromString(content, StandardCharsets.UTF_8));
+            send(request, content);
         } catch (S3Exception e) {
             // 412: precondition failed, 409: a concurrent conditional write, 404: If-Match on a deleted object
-            if (what != null && (e.statusCode() == 412 || e.statusCode() == 409 || e.statusCode() == 404)) {
-                throw new StoreConflictException(current == null ? what + " already exists"
-                        : what + " was changed by someone else");
+            if (e.statusCode() == 412 || e.statusCode() == 409 || e.statusCode() == 404) {
+                throw StoreLayout.conflict(what, current);
             }
             throw failed(e, "write", key);
         } catch (SdkException e) {
             throw failed(e, "write", key);
         }
+    }
+
+    private PutObjectRequest.Builder putRequest(String key, Map<String, String> metadata) {
+        return PutObjectRequest.builder().bucket(bucket).key(key)
+                .contentType("application/xml; charset=utf-8").metadata(metadata);
+    }
+
+    private void send(PutObjectRequest.Builder request, String content) {
+        s3.putObject(request.build(), RequestBody.fromString(content, StandardCharsets.UTF_8));
     }
 
     private void remove(String key) {
@@ -344,7 +340,7 @@ public class S3ModelStore implements ModelStore {
         String dir = history(id);
         List<String> keys = new ArrayList<>();
         listing(dir, true, o -> {
-            if (SNAPSHOT.matcher(o.key().substring(dir.length())).matches()) {
+            if (StoreLayout.isSnapshot(o.key().substring(dir.length()))) {
                 keys.add(o.key());
             }
         });
@@ -352,9 +348,9 @@ public class S3ModelStore implements ModelStore {
         return keys;
     }
 
-    private static long number(String snapshotKey) {
-        String name = snapshotKey.substring(snapshotKey.lastIndexOf('/') + 1);
-        return Long.parseLong(name.substring(0, name.length() - EXT.length()));
+    /** The last part of a key. */
+    private static String name(String key) {
+        return key.substring(key.lastIndexOf('/') + 1);
     }
 
     private static long revision(Map<String, String> metadata) {
@@ -364,16 +360,6 @@ public class S3ModelStore implements ModelStore {
         } catch (NumberFormatException e) {
             return 0;
         }
-    }
-
-    private static Properties properties(String content) {
-        Properties props = new Properties();
-        try {
-            props.load(new StringReader(content));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return props;
     }
 
     private S3StoreException failed(SdkException e, String action, String key) {
@@ -388,7 +374,7 @@ public class S3ModelStore implements ModelStore {
     }
 
     private String model(String id) {
-        return root + id + EXT;
+        return root + id + MODEL_EXT;
     }
 
     private String tests(String id) {
@@ -396,10 +382,10 @@ public class S3ModelStore implements ModelStore {
     }
 
     private String meta(String id) {
-        return root + ".meta/" + id + ".properties";
+        return root + META_DIR + "/" + id + META_EXT;
     }
 
     private String history(String id) {
-        return root + ".history/" + id + "/";
+        return root + HISTORY_DIR + "/" + id + "/";
     }
 }

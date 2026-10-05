@@ -41,7 +41,7 @@
             <p class="err-text" th:if="${m.error() != null}" th:text="${m.error()}">error</p>
             <div class="meta">
                 <span class="badge" th:text="'DMN ' + ${m.version()}">DMN 1.5</span>
-                <span class="badge s3" th:if="${m.s3Key() != null}" th:title="${m.s3Key()}">S3</span>
+                <span class="badge s3" th:if="${s3Links[m.id()] != null}" th:title="${s3Links[m.id()]}">S3</span>
                 <span th:text="${m.decisions()} + ' decisions · ' + ${m.elements()} + ' elements'">3 decisions</span>
                 <time th:datetime="${m.updated()}" th:text="${m.updatedText()}">date</time>
             </div>

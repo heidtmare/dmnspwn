@@ -2,11 +2,16 @@ package heidtmare.dmnspwn.diagram;
 
 import static heidtmare.dmnspwn.diagram.Geometry.fmt;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
 import heidtmare.dmnspwn.diagram.DiagramView.Edge;
 import heidtmare.dmnspwn.diagram.DiagramView.Node;
+import heidtmare.dmnspwn.eval.Evaluation;
+import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
+import heidtmare.dmnspwn.eval.Evaluation.InputResult;
+import heidtmare.dmnspwn.eval.Trace;
 import heidtmare.dmnspwn.model.ElementKind;
 
 /**
@@ -39,6 +44,37 @@ public record Overlay(Map<String, Mark> marks) {
      */
     public record Badge(String x, String y, String width, String height, String textX, String textY, String text,
                         String title, String labelShift) {
+    }
+
+    /**
+     * Marks each supplied input and evaluated decision of {@code result} with its value and status. Decisions in
+     * {@code failedExpectations} (decision id to the expected value of a failing test) are marked as mismatches.
+     */
+    public static Overlay of(Evaluation result, Map<String, String> failedExpectations) {
+        Map<String, Mark> marks = new LinkedHashMap<>();
+        for (InputResult i : result.inputs()) {
+            marks.put(i.id(), i.error() != null ? new Mark(Status.ERROR, i.text(), i.error())
+                    : new Mark(Status.OK, i.formatted(), null));
+        }
+        for (DecisionResult d : result.decisions()) {
+            String expected = failedExpectations.get(d.id());
+            Status status;
+            String detail = null;
+            if (expected != null) {
+                status = Status.MISMATCH;
+                detail = "expected " + expected;
+            } else if (d.hasErrors()) {
+                status = Status.ERROR;
+            } else {
+                status = d.messages().isEmpty() ? Status.OK : Status.WARNING;
+            }
+            if (!d.messages().isEmpty()) {
+                String messages = String.join("\n", d.messages().stream().map(Trace.Message::text).toList());
+                detail = detail == null ? messages : detail + "\n" + messages;
+            }
+            marks.put(d.id(), new Mark(status, d.formatted(), detail));
+        }
+        return new Overlay(marks);
     }
 
     public Mark mark(String elementId) {

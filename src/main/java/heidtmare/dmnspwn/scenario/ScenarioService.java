@@ -5,16 +5,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import org.springframework.stereotype.Service;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.scenario.TestReport.Check;
 import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
+import heidtmare.dmnspwn.store.LruCache;
 import heidtmare.dmnspwn.store.ModelNotFoundException;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
@@ -27,10 +26,13 @@ import heidtmare.dmnspwn.xml.DmnFormatException;
 @Service
 public class ScenarioService {
 
+    /** Models whose test report is kept; the least recently viewed are run again when needed. */
+    private static final int CACHED_REPORTS = 200;
+
     private final ModelService models;
     private final ModelStore store;
     private final Feel feel;
-    private final ConcurrentHashMap<String, Cached> reports = new ConcurrentHashMap<>();
+    private final LruCache<String, Cached> reports = new LruCache<>(CACHED_REPORTS);
 
     private record Cached(ModelStore.Stamp stamp, String xml, TestReport report) {
     }
@@ -61,14 +63,20 @@ public class ScenarioService {
         try {
             report = new TestReport(runner(id).runAll(TestCases.read(xml.get())), null);
         } catch (DmnFormatException e) {
-            report = new TestReport(List.of(), "The test file " + id + ".tests.xml cannot be read: " + e.getMessage());
+            report = new TestReport(List.of(), "The saved tests cannot be read: " + e.getMessage());
         }
         reports.put(id, new Cached(stamp, xml.get(), report));
         return report;
     }
 
+    /** A runner for the model's current version. */
     public ScenarioRunner runner(String id) {
-        return new ScenarioRunner(new ModelEvaluator(models.reader(id), feel), feel);
+        return runner(new ModelEvaluator(models.reader(id), feel));
+    }
+
+    /** A runner using an evaluator the caller also uses for other things. */
+    public ScenarioRunner runner(ModelEvaluator evaluator) {
+        return new ScenarioRunner(evaluator, feel);
     }
 
     /** Adds a scenario, replacing one with the same name; returns whether one was replaced. */
@@ -76,42 +84,37 @@ public class ScenarioService {
         return change(id, list -> {
             Scenario s = scenario.name().isEmpty()
                     ? new Scenario(nextName(list), scenario.inputs(), scenario.expected()) : scenario;
-            return merge(list, List.of(s));
-        }) == 0;
+            return merge(list, List.of(s)) > 0;
+        });
     }
 
     /** Adds the scenarios of a TCK file, replacing those with the same names; returns how many were read. */
     public int importXml(String id, String xml) {
         List<Scenario> imported = TestCases.read(xml);
         if (imported.isEmpty()) {
-            throw new DmnEditException("The file contains no decision test cases");
+            throw new InvalidScenarioException("The file contains no decision test cases");
         }
         change(id, list -> merge(list, imported));
         return imported.size();
     }
 
     public void delete(String id, int index) {
-        change(id, list -> {
-            list.remove(checkIndex(list, index));
-            return list;
-        });
+        change(id, list -> list.remove(checkIndex(list, index)));
     }
 
     /** Makes the current results of a scenario its expected results. */
     public Scenario accept(String id, int index) {
-        Scenario[] accepted = new Scenario[1];
-        change(id, list -> {
+        return change(id, list -> {
             Scenario s = list.get(checkIndex(list, index));
             ScenarioResult result = runner(id).run(index, s);
             Map<String, String> expected = new LinkedHashMap<>();
             for (Check c : result.checks()) {
                 expected.put(c.decision(), c.decisionId() == null ? c.expected() : c.actual());
             }
-            accepted[0] = s.withExpected(expected);
-            list.set(index, accepted[0]);
-            return list;
+            Scenario accepted = s.withExpected(expected);
+            list.set(index, accepted);
+            return accepted;
         });
-        return accepted[0];
     }
 
     public Scenario get(String id, int index) {
@@ -121,7 +124,7 @@ public class ScenarioService {
 
     /** The model's scenarios as a TCK file. */
     public String xml(String id) {
-        models.xml(id);
+        models.requireExists(id);
         return tests(id).orElseGet(() -> TestCases.write(id + ".dmn", List.of(), feel));
     }
 
@@ -129,19 +132,24 @@ public class ScenarioService {
         return store.readTests(id).map(ModelStore.Stored::content);
     }
 
-    /** Edits the scenario list (see {@link ModelService#atomically}); returns the size difference. */
-    private int change(String id, UnaryOperator<List<Scenario>> edit) {
+    /**
+     * Edits the model's scenario list in place and stores it (see {@link ModelService#atomically}); returns what
+     * {@code edit} returns.
+     */
+    private <T> T change(String id, Function<List<Scenario>, T> edit) {
         return models.atomically(id, () -> {
-            models.xml(id);
+            models.requireExists(id);
             ModelStore.Stored current = store.readTests(id).orElse(null);
-            List<Scenario> before = current == null ? List.of() : TestCases.read(current.content());
-            List<Scenario> after = edit.apply(new ArrayList<>(before));
-            store.writeTests(id, after.isEmpty() ? null : TestCases.write(id + ".dmn", after, feel), current);
-            return after.size() - before.size();
+            List<Scenario> list = current == null ? new ArrayList<>() : new ArrayList<>(TestCases.read(current.content()));
+            T result = edit.apply(list);
+            store.writeTests(id, list.isEmpty() ? null : TestCases.write(id + ".dmn", list, feel), current);
+            return result;
         });
     }
 
-    private static List<Scenario> merge(List<Scenario> list, List<Scenario> added) {
+    /** Adds scenarios to {@code list}, replacing those with the same names; returns how many were replaced. */
+    private static int merge(List<Scenario> list, List<Scenario> added) {
+        int replaced = 0;
         for (Scenario s : added) {
             int existing = -1;
             for (int i = 0; i < list.size() && existing < 0; i++) {
@@ -151,11 +159,12 @@ public class ScenarioService {
             }
             if (existing >= 0) {
                 list.set(existing, s);
+                replaced++;
             } else {
                 list.add(s);
             }
         }
-        return list;
+        return replaced;
     }
 
     private static String nextName(List<Scenario> list) {
@@ -169,7 +178,7 @@ public class ScenarioService {
 
     private static int checkIndex(List<Scenario> list, int index) {
         if (index < 0 || index >= list.size()) {
-            throw new DmnEditException("The test no longer exists");
+            throw new InvalidScenarioException("The test no longer exists");
         }
         return index;
     }

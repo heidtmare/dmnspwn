@@ -61,6 +61,7 @@ class S3WebTest {
         mvc.perform(get(location + "/s3")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("s3://models/dmn/loan.dmn")))
                 .andExpect(content().string(containsString("Unchanged since last sync")));
+        mvc.perform(get("/")).andExpect(content().string(containsString("title=\"dmn/loan.dmn\">S3</span>")));
 
         mvc.perform(post(location + "/s3/publish").param("key", "dmn/copy.dmn"))
                 .andExpect(redirectedUrl(location + "/s3"))

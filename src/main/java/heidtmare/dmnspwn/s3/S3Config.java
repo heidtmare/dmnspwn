@@ -1,11 +1,9 @@
 package heidtmare.dmnspwn.s3;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import heidtmare.dmnspwn.config.DmnProperties;
-import heidtmare.dmnspwn.store.ModelStore;
 
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.regions.Region;
@@ -36,12 +34,5 @@ public class S3Config {
             builder.endpointOverride(s3.endpoint());
         }
         return builder.build();
-    }
-
-    /** Models, history and tests in the bucket, shared by every instance ({@code dmnspwn.storage=s3}). */
-    @Bean
-    @ConditionalOnProperty(name = "dmnspwn.storage", havingValue = "s3")
-    ModelStore s3ModelStore(S3Client s3Client, DmnProperties properties) {
-        return new S3ModelStore(s3Client, properties);
     }
 }

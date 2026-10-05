@@ -34,6 +34,8 @@ public class CookieFlashMapManager extends AbstractFlashMapManager {
     /** Browsers accept about 4 KB per cookie. */
     private static final int MAX_COOKIE = 3500;
     private static final int MAX_VALUE = 1000;
+    /** Flash maps read from one cookie at most; a request rarely leaves more than one. */
+    private static final int MAX_MAPS = 20;
 
     @Override
     protected List<FlashMap> retrieveFlashMaps(HttpServletRequest request) {
@@ -98,7 +100,7 @@ public class CookieFlashMapManager extends AbstractFlashMapManager {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        int count = Math.min(Integer.parseInt(props.getProperty("count", "0")), 20);
+        int count = Math.min(Integer.parseInt(props.getProperty("count", "0")), MAX_MAPS);
         List<FlashMap> maps = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             FlashMap map = new FlashMap();

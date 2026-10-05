@@ -3,7 +3,6 @@ package heidtmare.dmnspwn.web;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ContentDisposition;
@@ -20,14 +19,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.eval.Evaluation;
 import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ExpressionView;
+import heidtmare.dmnspwn.scenario.InvalidScenarioException;
 import heidtmare.dmnspwn.scenario.Scenario;
-import heidtmare.dmnspwn.scenario.ScenarioRunner;
 import heidtmare.dmnspwn.scenario.ScenarioService;
 import heidtmare.dmnspwn.store.ModelService;
 
@@ -64,14 +62,13 @@ public class ScenarioController {
                        @RequestParam(defaultValue = "") String decision, @RequestParam(defaultValue = "") String name,
                        RedirectAttributes flash) {
         ModelEvaluator evaluator = new ModelEvaluator(models.reader(id), feel);
-        Evaluation result = evaluator.evaluate(EvaluateController.inputs(params),
-                decision.isBlank() ? List.of() : List.of(decision), null);
+        Evaluation result = EvaluationForm.of(params, decision, null).evaluate(evaluator);
         if (result.hasInputErrors()) {
-            throw new DmnEditException("Fix the input values before saving them as a test");
+            throw new InvalidScenarioException("Fix the input values before saving them as a test");
         }
-        Scenario scenario = new ScenarioRunner(evaluator, feel).capture(name, result);
+        Scenario scenario = scenarios.runner(evaluator).capture(name, result);
         if (scenario.expected().isEmpty()) {
-            throw new DmnEditException("There are no decision results to save");
+            throw new InvalidScenarioException("There are no decision results to save");
         }
         boolean replaced = scenarios.save(id, scenario);
         flash.addFlashAttribute("success", replaced ? "Test '" + scenario.name() + "' updated" : "Test saved");

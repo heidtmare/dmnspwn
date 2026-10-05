@@ -15,6 +15,7 @@ import org.springframework.web.servlet.support.RequestContextUtils;
 import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.s3.S3StoreException;
+import heidtmare.dmnspwn.scenario.InvalidScenarioException;
 import heidtmare.dmnspwn.store.NotFoundException;
 import heidtmare.dmnspwn.store.StoreConflictException;
 import heidtmare.dmnspwn.xml.DmnFormatException;
@@ -62,7 +63,7 @@ public class WebAdvice {
     }
 
     /** Invalid edits or uploads: a POST goes back to the page it came from with a message. */
-    @ExceptionHandler({DmnEditException.class, DmnFormatException.class})
+    @ExceptionHandler({DmnEditException.class, DmnFormatException.class, InvalidScenarioException.class})
     public String invalid(RuntimeException e, HttpServletRequest request, HttpServletResponse response, Model model) {
         return failed(HttpStatus.BAD_REQUEST, e.getMessage(), request, response, model);
     }

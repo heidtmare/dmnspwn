@@ -2,6 +2,9 @@ package heidtmare.dmnspwn.web;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import org.springframework.beans.factory.ObjectProvider;
 
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Controller;
@@ -13,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import heidtmare.dmnspwn.edit.DmnEditException;
+import heidtmare.dmnspwn.s3.S3Sync;
 import heidtmare.dmnspwn.store.ModelService;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,14 +25,19 @@ import jakarta.servlet.http.HttpServletResponse;
 public class HomeController {
 
     private final ModelService models;
+    /** Present when the S3 integration is enabled. */
+    private final ObjectProvider<S3Sync> s3;
 
-    public HomeController(ModelService models) {
+    public HomeController(ModelService models, ObjectProvider<S3Sync> s3) {
         this.models = models;
+        this.s3 = s3;
     }
 
     @GetMapping("/")
     public String index(Model model) {
         model.addAttribute("models", models.list());
+        S3Sync sync = s3.getIfAvailable();
+        model.addAttribute("s3Links", sync == null ? Map.of() : sync.linkedKeys());
         return "index";
     }
 

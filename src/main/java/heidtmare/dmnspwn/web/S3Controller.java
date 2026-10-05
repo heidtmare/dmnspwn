@@ -66,7 +66,7 @@ public class S3Controller {
     @PostMapping("/models/{id}/s3/publish")
     public String publish(@PathVariable String id, @RequestParam(required = false) String key,
                           @RequestParam(defaultValue = "false") boolean force, RedirectAttributes flash) {
-        models.xml(id);
+        models.requireExists(id);
         try {
             String target = sync.publish(id, key, force);
             flash.addFlashAttribute("success", "Published to " + sync.bucket().location(target));

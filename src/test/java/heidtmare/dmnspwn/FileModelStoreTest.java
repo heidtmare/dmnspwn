@@ -1,6 +1,7 @@
 package heidtmare.dmnspwn;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import heidtmare.dmnspwn.store.FileModelStore;
+import heidtmare.dmnspwn.store.ModelNotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelStore.Entry;
@@ -50,7 +52,7 @@ class FileModelStoreTest extends ModelStoreContract {
     }
 
     @Test
-    void ordersSnapshotsNumericallyNotByName() throws IOException {
+    void renumbersSnapshotsOfEarlierVersionsInOrder() throws IOException {
         ModelStore store = store(5);
         ModelService models = new ModelService(store);
         store.write("m", "current", null, false);
@@ -60,12 +62,24 @@ class FileModelStoreTest extends ModelStoreContract {
         Files.writeString(dir.resolve("1000-1.dmn"), "newer");
         Files.writeString(dir.resolve("1000-0.dmn"), "middle");
 
+        assertThat(store.hasHistory("m")).isTrue();
+        try (Stream<Path> files = Files.list(dir)) {
+            assertThat(files.map(p -> p.getFileName().toString()))
+                    .containsExactlyInAnyOrder("000000000001.dmn", "000000000002.dmn", "000000000003.dmn");
+        }
         assertThat(models.undo("m")).isTrue();
         assertThat(content(store, "m")).isEqualTo("newer");
         assertThat(models.undo("m")).isTrue();
         assertThat(content(store, "m")).isEqualTo("middle");
         assertThat(models.undo("m")).isTrue();
         assertThat(content(store, "m")).isEqualTo("older");
+    }
+
+    @Test
+    void rejectsInvalidIdsBeforeLocking() {
+        ModelService models = new ModelService(store(1));
+
+        assertThatThrownBy(() -> models.atomically("../m", () -> null)).isInstanceOf(ModelNotFoundException.class);
     }
 
     @Test

@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import heidtmare.dmnspwn.s3.S3Bucket.RemoteObject;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
-import heidtmare.dmnspwn.xml.DmnDocument;
 
 /**
  * Loads models from S3 and publishes them back. Each local model remembers the key it is linked to,
@@ -76,11 +75,18 @@ public class S3Sync {
     /** Local model ids by linked S3 key. */
     public Map<String, String> linkedModels() {
         Map<String, String> result = new LinkedHashMap<>();
+        linkedKeys().forEach((id, key) -> result.putIfAbsent(key, id));
+        return result;
+    }
+
+    /** The linked S3 key of each local model that has one, by model id. */
+    public Map<String, String> linkedKeys() {
+        Map<String, String> result = new LinkedHashMap<>();
         Map<String, Properties> meta = store.readAllMeta();
         for (ModelStore.Entry entry : store.list()) {
             Properties p = meta.get(entry.id());
             if (p != null) {
-                link(p).ifPresent(l -> result.putIfAbsent(l.key(), entry.id()));
+                link(p).ifPresent(l -> result.put(entry.id(), l.key()));
             }
         }
         return result;
@@ -92,7 +98,6 @@ public class S3Sync {
      */
     public String load(String key) {
         RemoteObject object = bucket.get(key);
-        DmnDocument.parse(object.content());
         String existing = linkedModels().get(object.key());
         if (existing != null) {
             return models.atomically(existing, () -> {
@@ -101,8 +106,7 @@ public class S3Sync {
                             + "Open it and publish them, or use 'Pull from S3' to discard them.")
                             .formatted(existing, bucket.location(object.key())));
                 }
-                models.replaceSource(existing, object.content());
-                remember(existing, object.key(), object.etag(), object.content());
+                replace(existing, object);
                 return existing;
             });
         }
@@ -116,12 +120,16 @@ public class S3Sync {
     public void pull(String id) {
         Link link = link(id).orElseThrow(() -> new S3StoreException("This model is not linked to an S3 object"));
         RemoteObject object = bucket.get(link.key());
-        DmnDocument.parse(object.content());
         models.atomically(id, () -> {
-            models.replaceSource(id, object.content());
-            remember(id, object.key(), object.etag(), object.content());
+            replace(id, object);
             return null;
         });
+    }
+
+    /** Replaces the local model with {@code object} (validating it) and records the sync. */
+    private void replace(String id, RemoteObject object) {
+        models.replaceSource(id, object.content());
+        remember(id, object.key(), object.etag(), object.content());
     }
 
     /**

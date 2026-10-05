@@ -118,19 +118,39 @@ public final class Values {
         return sb.toString();
     }
 
+    /**
+     * The text of a number, string, boolean, temporal or duration value without FEEL syntax: {@code 2024-01-31} for
+     * {@code date("2024-01-31")}, the characters of a string; null for other values.
+     */
+    public static String literal(Val v) {
+        return switch (v) {
+            case ValNumber n -> plain(n.value().bigDecimal());
+            case ValString s -> s.value();
+            case ValBoolean b -> String.valueOf(b.value());
+            case ValDate d -> d.toString();
+            case ValLocalTime t -> t.toString();
+            case ValTime t -> t.toString();
+            case ValLocalDateTime t -> t.toString();
+            case ValDateTime t -> t.toString();
+            case ValDayTimeDuration d -> d.toString();
+            case ValYearMonthDuration d -> d.toString();
+            case null, default -> null;
+        };
+    }
+
     private static void format(Val v, StringBuilder sb) {
         switch (v) {
             case null -> sb.append("null");
-            case ValNumber n -> sb.append(plain(n.value().bigDecimal()));
+            case ValNumber n -> sb.append(literal(n));
             case ValString s -> quote(s.value(), sb);
-            case ValBoolean b -> sb.append(b.value());
-            case ValDate d -> sb.append("date(\"").append(d).append("\")");
-            case ValLocalTime t -> sb.append("time(\"").append(t).append("\")");
-            case ValTime t -> sb.append("time(\"").append(t).append("\")");
-            case ValLocalDateTime t -> sb.append("date and time(\"").append(t).append("\")");
-            case ValDateTime t -> sb.append("date and time(\"").append(t).append("\")");
-            case ValDayTimeDuration d -> sb.append("duration(\"").append(d).append("\")");
-            case ValYearMonthDuration d -> sb.append("duration(\"").append(d).append("\")");
+            case ValBoolean b -> sb.append(literal(b));
+            case ValDate d -> sb.append("date(\"").append(literal(d)).append("\")");
+            case ValLocalTime t -> sb.append("time(\"").append(literal(t)).append("\")");
+            case ValTime t -> sb.append("time(\"").append(literal(t)).append("\")");
+            case ValLocalDateTime t -> sb.append("date and time(\"").append(literal(t)).append("\")");
+            case ValDateTime t -> sb.append("date and time(\"").append(literal(t)).append("\")");
+            case ValDayTimeDuration d -> sb.append("duration(\"").append(literal(d)).append("\")");
+            case ValYearMonthDuration d -> sb.append("duration(\"").append(literal(d)).append("\")");
             case ValList l -> {
                 sb.append('[');
                 List<Val> items = items(l);
