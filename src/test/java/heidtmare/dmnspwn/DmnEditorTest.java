@@ -17,7 +17,7 @@ import heidtmare.dmnspwn.edit.Forms.ItemDefinitionForm;
 import heidtmare.dmnspwn.edit.Forms.ParametersForm;
 import heidtmare.dmnspwn.edit.Forms.RuleRow;
 import heidtmare.dmnspwn.edit.Forms.ServiceForm;
-import heidtmare.dmnspwn.edit.LogicType;
+import heidtmare.dmnspwn.edit.LogicEditor.LogicType;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;

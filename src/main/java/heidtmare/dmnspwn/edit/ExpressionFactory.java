@@ -12,6 +12,7 @@ import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.HitPolicy;
 import heidtmare.dmnspwn.xml.DmnDocument;
+import heidtmare.dmnspwn.edit.LogicEditor.LogicType;
 
 /** Creates new boxed expressions and their parts, with fresh ids. */
 final class ExpressionFactory {
@@ -24,8 +25,7 @@ final class ExpressionFactory {
 
     /** A new expression of the given type for {@code owner}, pre-filled from its requirements where useful. */
     Element create(LogicType type, Element owner) {
-        Element expr = doc.create(type.localName());
-        expr.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix(type.localName())));
+        Element expr = doc.createWithId(type.localName(), DmnDocument.idPrefix(type.localName()));
         switch (type) {
             case LITERAL -> doc.setText(expr, "");
             case DECISION_TABLE -> initDecisionTable(expr, owner);
@@ -34,12 +34,10 @@ final class ExpressionFactory {
                 expr.appendChild(contextEntry(null));
             }
             case RELATION -> {
-                Element column = doc.create("column");
-                column.setAttribute("id", doc.uniqueId("InformationItem"));
+                Element column = doc.createWithId("column", "InformationItem");
                 column.setAttribute("name", "column 1");
                 expr.appendChild(column);
-                Element row = doc.create("row");
-                row.setAttribute("id", doc.uniqueId("List"));
+                Element row = doc.createWithId("row", "List");
                 row.appendChild(literal(""));
                 expr.appendChild(row);
             }
@@ -94,8 +92,7 @@ final class ExpressionFactory {
         for (Element p : doc.child(bkm, "encapsulatedLogic").map(fn -> doc.children(fn, "formalParameter"))
                 .orElse(List.of())) {
             Element binding = doc.create("binding");
-            Element param = doc.create("parameter");
-            param.setAttribute("id", doc.uniqueId("InformationItem"));
+            Element param = doc.createWithId("parameter", "InformationItem");
             param.setAttribute("name", p.getAttribute("name"));
             setAttr(param, "typeRef", attr(p, "typeRef"));
             binding.appendChild(param);
@@ -121,8 +118,7 @@ final class ExpressionFactory {
     private Element contextEntry(String name) {
         Element entry = doc.create("contextEntry");
         if (name != null) {
-            Element variable = doc.create("variable");
-            variable.setAttribute("id", doc.uniqueId("InformationItem"));
+            Element variable = doc.createWithId("variable", "InformationItem");
             variable.setAttribute("name", name);
             entry.appendChild(variable);
         }
@@ -137,8 +133,7 @@ final class ExpressionFactory {
     }
 
     Element literal(String text) {
-        Element literal = doc.create("literalExpression");
-        literal.setAttribute("id", doc.uniqueId("LiteralExpression"));
+        Element literal = doc.createWithId("literalExpression", "LiteralExpression");
         doc.setText(literal, text);
         return literal;
     }
@@ -146,10 +141,8 @@ final class ExpressionFactory {
     // ---- decision table parts ------------------------------------------------------------------
 
     Element inputClause(String expression, String typeRef) {
-        Element input = doc.create("input");
-        input.setAttribute("id", doc.uniqueId("InputClause"));
-        Element expr = doc.create("inputExpression");
-        expr.setAttribute("id", doc.uniqueId("LiteralExpression"));
+        Element input = doc.createWithId("input", "InputClause");
+        Element expr = doc.createWithId("inputExpression", "LiteralExpression");
         setAttr(expr, "typeRef", typeRef);
         doc.setText(expr, expression);
         input.appendChild(expr);
@@ -157,8 +150,7 @@ final class ExpressionFactory {
     }
 
     Element outputClause(String name, String typeRef) {
-        Element output = doc.create("output");
-        output.setAttribute("id", doc.uniqueId("OutputClause"));
+        Element output = doc.createWithId("output", "OutputClause");
         setAttr(output, "name", name);
         setAttr(output, "typeRef", typeRef);
         return output;
@@ -172,8 +164,7 @@ final class ExpressionFactory {
 
     /** A rule with an empty entry per column: {@code -} for inputs, blank for outputs and annotations. */
     Element rule(int inputs, int outputs, int annotations) {
-        Element rule = doc.create("rule");
-        rule.setAttribute("id", doc.uniqueId("DecisionRule"));
+        Element rule = doc.createWithId("rule", "DecisionRule");
         for (int i = 0; i < inputs; i++) {
             rule.appendChild(inputEntry());
         }
@@ -187,15 +178,13 @@ final class ExpressionFactory {
     }
 
     Element inputEntry() {
-        Element entry = doc.create("inputEntry");
-        entry.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix("inputEntry")));
+        Element entry = doc.createWithId("inputEntry", DmnDocument.idPrefix("inputEntry"));
         doc.setText(entry, "-");
         return entry;
     }
 
     Element outputEntry() {
-        Element entry = doc.create("outputEntry");
-        entry.setAttribute("id", doc.uniqueId(DmnDocument.idPrefix("outputEntry")));
+        Element entry = doc.createWithId("outputEntry", DmnDocument.idPrefix("outputEntry"));
         doc.setText(entry, "");
         return entry;
     }

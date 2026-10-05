@@ -25,6 +25,9 @@ public record DmnProperties(@DefaultValue("file") Storage storage,
     public enum Storage { FILE, S3 }
 
     public DmnProperties {
+        if (s3.enabled() && (s3.bucket() == null || s3.bucket().isBlank())) {
+            throw new IllegalArgumentException("dmnspwn.s3.bucket must be set when dmnspwn.s3.enabled=true");
+        }
         if (storage == Storage.S3) {
             if (!s3.enabled()) {
                 throw new IllegalArgumentException("dmnspwn.storage=s3 requires dmnspwn.s3.enabled=true");

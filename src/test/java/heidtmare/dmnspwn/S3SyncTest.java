@@ -14,7 +14,6 @@ import software.amazon.awssdk.auth.credentials.internal.WebIdentityCredentialsUt
 import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.Forms.ElementForm;
 import heidtmare.dmnspwn.s3.S3Bucket;
-import heidtmare.dmnspwn.s3.S3ConflictException;
 import heidtmare.dmnspwn.s3.S3StoreException;
 import heidtmare.dmnspwn.s3.S3Sync;
 import heidtmare.dmnspwn.store.FileModelStore;
@@ -108,7 +107,7 @@ class S3SyncTest {
         // someone else changes the object -> publishing must not overwrite it
         s3.store("dmn/loan.dmn", "<changed elsewhere/>");
         rename(id, "Edited twice");
-        assertThatThrownBy(() -> sync.publish(id, null, false)).isInstanceOf(S3ConflictException.class);
+        assertThatThrownBy(() -> sync.publish(id, null, false)).isInstanceOf(S3StoreException.Conflict.class);
         assertThat(s3.content("dmn/loan.dmn")).isEqualTo("<changed elsewhere/>");
         sync.publish(id, null, true);
         assertThat(s3.content("dmn/loan.dmn")).contains("Edited twice");
@@ -122,7 +121,7 @@ class S3SyncTest {
         assertThat(s3.puts.getLast().ifNoneMatch()).isEqualTo("*");
         assertThat(sync.link(id).orElseThrow().key()).isEqualTo("dmn/" + id + ".dmn");
 
-        assertThatThrownBy(() -> sync.publish(id, "dmn/loan.dmn", false)).isInstanceOf(S3ConflictException.class)
+        assertThatThrownBy(() -> sync.publish(id, "dmn/loan.dmn", false)).isInstanceOf(S3StoreException.Conflict.class)
                 .hasMessageContaining("already exists");
         sync.unlink(id);
         assertThat(sync.link(id)).isEmpty();

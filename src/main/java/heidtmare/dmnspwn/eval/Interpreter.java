@@ -12,6 +12,7 @@ import org.camunda.feel.syntaxtree.Val;
 import org.camunda.feel.syntaxtree.ValContext;
 import org.camunda.feel.syntaxtree.ValFunction;
 
+import heidtmare.dmnspwn.eval.Evaluation.Message;
 import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.ExpressionView.DecisionTable;
 import heidtmare.dmnspwn.model.ExpressionView.OutputClause;
@@ -81,7 +82,7 @@ final class Interpreter {
     }
 
     private Val report(Feel.Result result, Supplier<String> where) {
-        if (!result.failed() && result.warnings().isEmpty()) {
+        if (result.problem() == null) {
             return result.value();
         }
         String prefix = where == null ? "" : where.get() + ": ";
@@ -373,5 +374,37 @@ final class Interpreter {
             }
         }
         return Values.list(kept);
+    }
+
+    /** Messages and decision table hits collected while evaluating one decision (or one ad-hoc expression). */
+    static final class Trace {
+
+        private final List<Message> messages = new ArrayList<>();
+        private final Map<String, List<Integer>> matchedRules = new LinkedHashMap<>();
+
+        public void error(String text) {
+            add(new Message(true, text));
+        }
+
+        public void warning(String text) {
+            add(new Message(false, text));
+        }
+
+        void add(Message message) {
+            messages.add(message);
+        }
+
+        /** Records the 1-based rules of a decision table that matched, keyed by the table's id (or "" without one). */
+        void matched(String tableId, List<Integer> rules) {
+            matchedRules.put(tableId == null ? "" : tableId, List.copyOf(rules));
+        }
+
+        public List<Message> messages() {
+            return messages;
+        }
+
+        public Map<String, List<Integer>> matchedRules() {
+            return matchedRules;
+        }
     }
 }

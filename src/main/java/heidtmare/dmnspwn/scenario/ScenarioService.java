@@ -11,13 +11,14 @@ import org.springframework.stereotype.Service;
 
 import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.ModelEvaluator;
-import heidtmare.dmnspwn.scenario.TestReport.Check;
-import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.Check;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.ScenarioResult;
 import heidtmare.dmnspwn.store.LruCache;
-import heidtmare.dmnspwn.store.ModelNotFoundException;
+import heidtmare.dmnspwn.store.NotFoundException;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.xml.DmnFormatException;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport;
 
 /**
  * Stores each model's test scenarios beside it (see {@link ModelStore#readTests}) and runs them. Reports are
@@ -49,7 +50,7 @@ public class ScenarioService {
 
     /** The current results of the model's scenarios; an unreadable test file is reported, not thrown. */
     public TestReport report(String id) {
-        ModelStore.Stamp stamp = store.stamp(id).orElseThrow(() -> new ModelNotFoundException(id));
+        ModelStore.Stamp stamp = store.stamp(id).orElseThrow(() -> NotFoundException.model(id));
         Optional<String> xml = tests(id);
         if (xml.isEmpty()) {
             reports.remove(id);
@@ -70,7 +71,7 @@ public class ScenarioService {
     }
 
     /** A runner for the model's current version. */
-    public ScenarioRunner runner(String id) {
+    private ScenarioRunner runner(String id) {
         return runner(new ModelEvaluator(models.reader(id), feel));
     }
 

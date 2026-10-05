@@ -7,7 +7,7 @@ import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 
-import heidtmare.dmnspwn.store.ModelNotFoundException;
+import heidtmare.dmnspwn.store.NotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelStore.Entry;
@@ -124,7 +124,7 @@ abstract class ModelStoreContract {
         assertThat(store.list()).extracting(Entry::id).containsExactly("a", "b");
         assertThat(store.read("../a")).isEmpty();
         assertThat(store.exists("../a")).isFalse();
-        assertThatThrownBy(() -> store.write("../a", "x", null, false)).isInstanceOf(ModelNotFoundException.class);
+        assertThatThrownBy(() -> store.write("../a", "x", null, false)).isInstanceOf(NotFoundException.class);
     }
 
     @Test

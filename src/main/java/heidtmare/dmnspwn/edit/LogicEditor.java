@@ -6,6 +6,7 @@ import static heidtmare.dmnspwn.edit.EditSupport.required;
 import static heidtmare.dmnspwn.xml.DmnDocument.attr;
 import static heidtmare.dmnspwn.xml.DmnDocument.setAttr;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +24,7 @@ import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
 import heidtmare.dmnspwn.xml.DmnDocument;
 import heidtmare.dmnspwn.xml.DmnFormatException;
+import heidtmare.dmnspwn.xml.DmnNamespaces;
 
 /** Edits the logic of decisions and business knowledge models, and the parameters of the latter. */
 public final class LogicEditor {
@@ -123,8 +125,7 @@ public final class LogicEditor {
             case SAVE -> {
             }
             case ADD_PARAMETER -> {
-                Element p = doc.create("formalParameter");
-                p.setAttribute("id", doc.uniqueId("InformationItem"));
+                Element p = doc.createWithId("formalParameter", "InformationItem");
                 p.setAttribute("name", "param" + (params.size() + 1));
                 doc.insert(fn, p);
             }
@@ -155,5 +156,46 @@ public final class LogicEditor {
             fn.setAttribute("id", doc.uniqueId("FunctionDefinition"));
         }
         return fn;
+    }
+
+    /** Boxed expression types that can be created as decision / BKM logic. */
+    public enum LogicType {
+
+        NONE(null, "None", false),
+        LITERAL("literalExpression", "Literal expression", false),
+        DECISION_TABLE("decisionTable", "Decision table", false),
+        CONTEXT("context", "Context", false),
+        RELATION("relation", "Relation", false),
+        LIST("list", "List", false),
+        INVOCATION("invocation", "Invocation", false),
+        FUNCTION("functionDefinition", "Function definition", false),
+        CONDITIONAL("conditional", "Conditional (if/then/else)", true),
+        FOR("for", "Iterator: for", true),
+        SOME("some", "Iterator: some", true),
+        EVERY("every", "Iterator: every", true),
+        FILTER("filter", "Filter", true);
+
+        private final String localName;
+        private final String displayName;
+        private final boolean since14;
+
+        LogicType(String localName, String displayName, boolean since14) {
+            this.localName = localName;
+            this.displayName = displayName;
+            this.since14 = since14;
+        }
+
+        public String localName() {
+            return localName;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+
+        public static List<LogicType> available(String modelNs) {
+            boolean extended = DmnNamespaces.supportsBoxedExtensions(modelNs);
+            return Arrays.stream(values()).filter(t -> extended || !t.since14).toList();
+        }
     }
 }

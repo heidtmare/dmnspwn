@@ -11,7 +11,6 @@ import heidtmare.dmnspwn.diagram.DiagramView.Node;
 import heidtmare.dmnspwn.eval.Evaluation;
 import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
 import heidtmare.dmnspwn.eval.Evaluation.InputResult;
-import heidtmare.dmnspwn.eval.Trace;
 import heidtmare.dmnspwn.model.ElementKind;
 
 /**
@@ -69,7 +68,7 @@ public record Overlay(Map<String, Mark> marks) {
                 status = d.messages().isEmpty() ? Status.OK : Status.WARNING;
             }
             if (!d.messages().isEmpty()) {
-                String messages = String.join("\n", d.messages().stream().map(Trace.Message::text).toList());
+                String messages = String.join("\n", d.messages().stream().map(Evaluation.Message::text).toList());
                 detail = detail == null ? messages : detail + "\n" + messages;
             }
             marks.put(d.id(), new Mark(status, d.formatted(), detail));

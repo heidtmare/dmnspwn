@@ -7,7 +7,6 @@ import static heidtmare.dmnspwn.store.StoreLayout.META_EXT;
 import static heidtmare.dmnspwn.store.StoreLayout.MODEL_EXT;
 import static heidtmare.dmnspwn.store.StoreLayout.TESTS_EXT;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +33,6 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
@@ -233,14 +231,10 @@ public class S3ModelStore implements ModelStore {
         if (cached != null) {
             request.ifNoneMatch(cached.stamp().tag());
         }
-        try (ResponseInputStream<GetObjectResponse> in = s3.getObject(request.build())) {
+        try {
+            ResponseInputStream<GetObjectResponse> in = s3.getObject(request.build());
             GetObjectResponse response = in.response();
-            if (response.contentLength() != null && response.contentLength() > maxObjectSize) {
-                in.abort();
-                throw new S3StoreException("%s is %d bytes; the limit is %d"
-                        .formatted(location(key), response.contentLength(), maxObjectSize));
-            }
-            String content = new String(S3Bucket.readLimited(in, maxObjectSize, key), StandardCharsets.UTF_8);
+            String content = S3Bucket.readBody(in, maxObjectSize, location(key));
             Stored stored = new Stored(content, new Stamp(response.eTag(), response.lastModified()),
                     revision(response.metadata()));
             cache.put(key, stored);
@@ -256,8 +250,6 @@ public class S3ModelStore implements ModelStore {
             throw failed(e, "read", key);
         } catch (SdkException e) {
             throw failed(e, "read", key);
-        } catch (IOException e) {
-            throw new S3StoreException("Reading " + location(key) + " failed: " + e.getMessage());
         }
     }
 
@@ -363,14 +355,11 @@ public class S3ModelStore implements ModelStore {
     }
 
     private S3StoreException failed(SdkException e, String action, String key) {
-        if (e instanceof NoSuchKeyException) {
-            return new S3StoreException("Could not " + action + " " + location(key) + ": the object does not exist");
-        }
         return S3Bucket.translate(e, action + " " + location(key), bucket);
     }
 
     private String location(String key) {
-        return "s3://" + bucket + "/" + key;
+        return S3Bucket.location(bucket, key);
     }
 
     private String model(String id) {

@@ -1,11 +1,8 @@
 package heidtmare.dmnspwn.s3;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -14,16 +11,15 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import heidtmare.dmnspwn.config.DmnProperties;
+import heidtmare.dmnspwn.store.ModelSummary;
 
 import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
@@ -37,12 +33,10 @@ import software.amazon.awssdk.services.s3.model.S3Object;
 public class S3Bucket {
 
     private static final int MAX_KEY_LENGTH = 1024;
-    static final DateTimeFormatter TIME =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     public record Entry(String key, String name, long size, Instant lastModified) {
         public String modifiedText() {
-            return lastModified == null ? "" : TIME.format(lastModified);
+            return lastModified == null ? "" : ModelSummary.FORMAT.format(lastModified);
         }
 
         public String sizeText() {
@@ -103,19 +97,12 @@ public class S3Bucket {
 
     public RemoteObject get(String key) {
         String k = checkKey(key);
-        try (ResponseInputStream<GetObjectResponse> in = s3.getObject(b -> b.bucket(bucket()).key(k))) {
-            Long length = in.response().contentLength();
-            long max = config.maxObjectSize().toBytes();
-            if (length != null && length > max) {
-                in.abort();
-                throw new S3StoreException("%s is %d bytes; the limit is %d".formatted(location(k), length, max));
-            }
-            byte[] bytes = readLimited(in, max, k);
-            return new RemoteObject(k, new String(bytes, StandardCharsets.UTF_8), in.response().eTag());
+        try {
+            ResponseInputStream<GetObjectResponse> in = s3.getObject(b -> b.bucket(bucket()).key(k));
+            return new RemoteObject(k, readBody(in, config.maxObjectSize().toBytes(), location(k)),
+                    in.response().eTag());
         } catch (SdkException e) {
             throw translate(e, "read " + location(k));
-        } catch (IOException e) {
-            throw new S3StoreException("Reading " + location(k) + " failed: " + e.getMessage());
         }
     }
 
@@ -124,8 +111,6 @@ public class S3Bucket {
         String k = checkKey(key);
         try {
             return Optional.ofNullable(s3.headObject(b -> b.bucket(bucket()).key(k)).eTag());
-        } catch (NoSuchKeyException e) {
-            return Optional.empty();
         } catch (S3Exception e) {
             if (e.statusCode() == 404) {
                 return Optional.empty();
@@ -153,7 +138,7 @@ public class S3Bucket {
             return s3.putObject(request.build(), RequestBody.fromString(xml, StandardCharsets.UTF_8)).eTag();
         } catch (S3Exception e) {
             if (e.statusCode() == 412 || e.statusCode() == 409) {
-                throw new S3ConflictException(k, ifMatch != null
+                throw new S3StoreException.Conflict(k, ifMatch != null
                         ? location(k) + " was changed in S3 since this model was last loaded or published."
                         : "An object already exists at " + location(k) + ".");
             }
@@ -181,7 +166,11 @@ public class S3Bucket {
     }
 
     public String location(String key) {
-        return "s3://" + bucket() + "/" + key;
+        return location(bucket(), key);
+    }
+
+    static String location(String bucket, String key) {
+        return "s3://" + bucket + "/" + key;
     }
 
     private String folder(String prefix) {
@@ -205,12 +194,22 @@ public class S3Bucket {
         return parent.length() < root().length() ? root() : parent;
     }
 
-    static byte[] readLimited(InputStream in, long max, String key) throws IOException {
-        byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, max + 1));
-        if (bytes.length > max) {
-            throw new S3StoreException(key + " exceeds the size limit of " + max + " bytes");
+    /** Reads and closes an object's content as UTF-8, failing for objects larger than {@code max} bytes. */
+    static String readBody(ResponseInputStream<GetObjectResponse> in, long max, String location) {
+        Long length = in.response().contentLength();
+        if (length != null && length > max) {
+            in.abort();
+            throw new S3StoreException("%s is %d bytes; the limit is %d".formatted(location, length, max));
         }
-        return bytes;
+        try (in) {
+            byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, max + 1));
+            if (bytes.length > max) {
+                throw new S3StoreException(location + " exceeds the size limit of " + max + " bytes");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new S3StoreException("Reading " + location + " failed: " + e.getMessage());
+        }
     }
 
     private S3StoreException translate(SdkException e, String action) {
@@ -230,9 +229,6 @@ public class S3Bucket {
                 default -> s3e.awsErrorDetails().errorMessage() + (code == null ? "" : " (" + code + ")");
             };
             return new S3StoreException("Could not " + action + ": " + detail);
-        }
-        if (e instanceof SdkClientException) {
-            return new S3StoreException("Could not " + action + ": " + e.getMessage());
         }
         return new S3StoreException("Could not " + action + ": " + e.getMessage());
     }

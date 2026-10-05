@@ -50,7 +50,7 @@ public record DiagramView(String diagramId, String name, Bounds viewport, List<N
      * @param kind     null for shapes referencing imported elements
      * @param external true for imported elements (not linkable)
      */
-    public record Node(String elementId, String shapeId, ElementKind kind, String name, Bounds bounds,
+    public record Node(String elementId, ElementKind kind, String name, Bounds bounds,
                        List<Line> lines, String textAnchor, String path, String dividerPath, boolean external) {
 
         public String cssClass() {

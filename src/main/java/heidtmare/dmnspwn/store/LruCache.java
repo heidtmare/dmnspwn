@@ -2,7 +2,6 @@ package heidtmare.dmnspwn.store;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Predicate;
 
 /** A thread-safe map that forgets its least recently used entries beyond a fixed size. */
 public final class LruCache<K, V> {
@@ -28,13 +27,5 @@ public final class LruCache<K, V> {
 
     public synchronized void remove(K key) {
         map.remove(key);
-    }
-
-    public synchronized void removeIf(Predicate<K> key) {
-        map.keySet().removeIf(key);
-    }
-
-    public synchronized int size() {
-        return map.size();
     }
 }

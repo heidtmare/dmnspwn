@@ -25,8 +25,7 @@ public final class ItemDefinitionEditor {
 
     /** Adds a top-level item definition and returns its path. */
     public String add(String name, String typeRef, boolean collection) {
-        Element item = doc.create("itemDefinition");
-        item.setAttribute("id", doc.uniqueId("ItemDefinition"));
+        Element item = doc.createWithId("itemDefinition", "ItemDefinition");
         item.setAttribute("name", required(name, "Type name"));
         if (collection) {
             item.setAttribute("isCollection", "true");
@@ -61,8 +60,7 @@ public final class ItemDefinitionEditor {
             case SAVE -> {
             }
             case ADD_COMPONENT -> {
-                Element c = doc.create("itemComponent");
-                c.setAttribute("id", doc.uniqueId("ItemComponent"));
+                Element c = doc.createWithId("itemComponent", "ItemComponent");
                 c.setAttribute("name", "field" + (components.size() + 1));
                 doc.setChildContent(c, "typeRef", "string");
                 doc.insert(item, c);

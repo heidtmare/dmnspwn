@@ -19,7 +19,7 @@ import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.Views.ConnectionView;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
-import heidtmare.dmnspwn.validate.Issue.Severity;
+import heidtmare.dmnspwn.validate.DmnValidator.Issue.Severity;
 import heidtmare.dmnspwn.xml.DmnDocument;
 
 /** Structural checks derived from the DMN specification's well-formedness rules. */
@@ -162,5 +162,17 @@ public final class DmnValidator {
 
     private static Issue issue(Severity severity, ElementView e, String message) {
         return new Issue(severity, e.id(), e.displayName(), message);
+    }
+
+    /** A finding of the model validator. {@code elementId} is null for model-wide issues. */
+    public record Issue(Severity severity, String elementId, String elementName, String message) {
+
+        public enum Severity {
+            ERROR, WARNING
+        }
+
+        public boolean isError() {
+            return severity == Severity.ERROR;
+        }
     }
 }

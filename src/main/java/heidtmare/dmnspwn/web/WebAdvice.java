@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.FlashMap;
+import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.support.RequestContextUtils;
 
 import heidtmare.dmnspwn.config.DmnProperties;
@@ -23,16 +27,43 @@ import heidtmare.dmnspwn.xml.DmnFormatException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/** Shared model attributes (edit mode, current URL) and error handling for all pages. */
+/**
+ * Shared model attributes (edit mode, current URL) and error handling for all pages.
+ * <p>
+ * Requests sent by the page scripts ({@code drd.js}) are marked with {@code X-Requested-With: fetch}. The script
+ * reloads the page itself, so where a form POST would be redirected the script gets 204 No Content instead, and a
+ * failure gets a 422 error fragment instead of a redirect.
+ */
 @ControllerAdvice
-public class WebAdvice {
+public class WebAdvice implements WebMvcConfigurer {
 
     public static final String EDIT_COOKIE = "dmn-edit";
+    static final String FETCH_HEADER = "X-Requested-With";
+    static final String FETCH_VALUE = "fetch";
 
     private final boolean s3Enabled;
 
     public WebAdvice(DmnProperties properties) {
         this.s3Enabled = properties.s3().enabled();
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new HandlerInterceptor() {
+            @Override
+            public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler,
+                                   ModelAndView mav) {
+                if (mav != null && isFetch(request) && mav.getViewName() != null
+                        && mav.getViewName().startsWith("redirect:")) {
+                    mav.clear();
+                    response.setStatus(HttpStatus.NO_CONTENT.value());
+                }
+            }
+        });
+    }
+
+    static boolean isFetch(HttpServletRequest request) {
+        return FETCH_VALUE.equals(request.getHeader(FETCH_HEADER));
     }
 
     @ModelAttribute("s3Enabled")
@@ -93,7 +124,7 @@ public class WebAdvice {
     private static String failed(HttpStatus status, String message, HttpServletRequest request,
                                  HttpServletResponse response, Model model) {
         if ("POST".equals(request.getMethod())) {
-            if (FetchRequests.isFetch(request)) {
+            if (isFetch(request)) {
                 return errorPage(HttpStatus.UNPROCESSABLE_CONTENT, message, model, response);
             }
             FlashMap flash = RequestContextUtils.getOutputFlashMap(request);

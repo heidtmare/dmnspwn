@@ -93,8 +93,7 @@ public final class DmnEditor {
             e.setAttribute("name", label);
         }
         if (kind.hasVariable()) {
-            Element variable = doc.create("variable");
-            variable.setAttribute("id", doc.uniqueId("InformationItem"));
+            Element variable = doc.createWithId("variable", "InformationItem");
             variable.setAttribute("name", label);
             doc.insert(e, variable);
         }

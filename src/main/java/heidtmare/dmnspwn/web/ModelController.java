@@ -59,7 +59,6 @@ public class ModelController {
         model.addAttribute("actualSize", actual);
         model.addAttribute("elements", elements);
         model.addAttribute("offDiagram", elements.stream().filter(e -> !placed.contains(e.id())).toList());
-        model.addAttribute("connections", reader.connections());
         model.addAttribute("imports", reader.imports());
         model.addAttribute("kinds", ElementKind.values());
         return "model";
@@ -80,7 +79,7 @@ public class ModelController {
         DiagramView diagram = DiagramBuilder.build(models.reader(id), drd);
         Context ctx = new Context();
         ctx.setVariables(Map.of("diagram", diagram, "editable", false));
-        String svg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + templates.process("diagram-svg", ctx).strip();
+        String svg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + templates.process("fragments/drd", Set.of("drd"), ctx).strip();
         return ResponseEntity.ok()
                 .contentType(MediaType.valueOf("image/svg+xml;charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION,

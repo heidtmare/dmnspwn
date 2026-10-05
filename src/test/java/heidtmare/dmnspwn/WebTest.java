@@ -57,6 +57,7 @@ class WebTest {
                 "/models/loan-eligibility/elements/Eligibility_Service", "/models/loan-eligibility/elements/Note_Minors",
                 "/models/loan-eligibility/elements/Lending_Policy", "/models/dish-selection/elements/Seasonal_Menu",
                 "/models/loan-eligibility/elements/Risk_Category/logic",
+                "/models/loan-eligibility/elements/Risk_Category/logic?raw=true",
                 "/models/loan-eligibility/elements/Installment_Calculation/logic",
                 "/models/loan-eligibility/elements/Loan_Offer/logic", "/models/loan-eligibility/types",
                 "/models/loan-eligibility/types/2", "/models/loan-eligibility/types/2.1",
@@ -65,6 +66,11 @@ class WebTest {
             mvc.perform(get(url)).andExpect(status().isOk());
             mvc.perform(get(url).cookie(EDIT)).andExpect(status().isOk());
         }
+        mvc.perform(get("/models/loan-eligibility/elements/Risk_Category/logic"))
+                .andExpect(content().string(containsString("Edit as XML")));
+        mvc.perform(get("/models/loan-eligibility/elements/Risk_Category/logic?raw=true"))
+                .andExpect(content().string(containsString("expression XML")))
+                .andExpect(content().string(containsString("Structured editor")));
         mvc.perform(get("/models/missing")).andExpect(status().isNotFound());
         mvc.perform(get("/models/loan-eligibility/elements/Missing")).andExpect(status().isNotFound());
         mvc.perform(get("/models/loan-eligibility/elements/Note_Minors/logic")).andExpect(status().isNotFound());

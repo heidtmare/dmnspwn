@@ -15,7 +15,7 @@ import heidtmare.dmnspwn.model.Views.ItemDefinitionView;
 import heidtmare.dmnspwn.scenario.ScenarioService;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.validate.DmnValidator;
-import heidtmare.dmnspwn.validate.Issue;
+import heidtmare.dmnspwn.validate.DmnValidator.Issue;
 
 /** Model attributes shared by every page that belongs to one model. */
 @Component

@@ -89,7 +89,7 @@ public final class InputForms {
         for (ItemDefinitionView item : chain) {
             if (item.allowedValues() != null && !item.allowedValues().isBlank()) {
                 Feel.Result r = feel.evaluate("[" + item.allowedValues() + "]", Scope.empty());
-                return r.failed() || !r.warnings().isEmpty() ? List.of()
+                return r.problem() != null ? List.of()
                         : Values.items(r.value()).stream().map(Values::format).toList();
             }
         }

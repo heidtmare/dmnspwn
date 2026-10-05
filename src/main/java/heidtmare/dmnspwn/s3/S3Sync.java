@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import heidtmare.dmnspwn.s3.S3Bucket.RemoteObject;
 import heidtmare.dmnspwn.store.ModelStore;
+import heidtmare.dmnspwn.store.ModelSummary;
 import heidtmare.dmnspwn.store.ModelService;
 
 /**
@@ -28,14 +29,14 @@ import heidtmare.dmnspwn.store.ModelService;
 @ConditionalOnS3Enabled
 public class S3Sync {
 
-    static final String KEY = "s3.key";
-    static final String ETAG = "s3.etag";
-    static final String HASH = "s3.hash";
-    static final String SYNCED = "s3.syncedAt";
+    private static final String KEY = "s3.key";
+    private static final String ETAG = "s3.etag";
+    private static final String HASH = "s3.hash";
+    private static final String SYNCED = "s3.syncedAt";
 
     public record Link(String key, String etag, String hash, Instant syncedAt) {
         public String syncedText() {
-            return syncedAt == null ? "" : S3Bucket.TIME.format(syncedAt);
+            return syncedAt == null ? "" : ModelSummary.FORMAT.format(syncedAt);
         }
     }
 
@@ -204,7 +205,7 @@ public class S3Sync {
         });
     }
 
-    static String sha256(String content) {
+    private static String sha256(String content) {
         try {
             return HexFormat.of().formatHex(
                     MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8)));

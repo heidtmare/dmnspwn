@@ -100,7 +100,7 @@ public final class DmnDocument {
         return DmnNamespaces.version(ns());
     }
 
-    public boolean isModelElement(Node node, String localName) {
+    private boolean isModelElement(Node node, String localName) {
         return node instanceof Element e && ns().equals(e.getNamespaceURI())
                 && (localName == null || localName.equals(e.getLocalName()));
     }
@@ -121,12 +121,7 @@ public final class DmnDocument {
     }
 
     public Optional<Element> child(Element parent, String localName) {
-        for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling()) {
-            if (isModelElement(n, localName)) {
-                return Optional.of((Element) n);
-            }
-        }
-        return Optional.empty();
+        return children(parent, localName).stream().findFirst();
     }
 
     public Element childOrCreate(Element parent, String localName) {
@@ -158,19 +153,17 @@ public final class DmnDocument {
         return Optional.empty();
     }
 
-    public List<Element> allModelElements(String localName) {
-        NodeList list = dom.getElementsByTagNameNS(ns(), localName);
-        List<Element> result = new ArrayList<>(list.getLength());
-        for (int i = 0; i < list.getLength(); i++) {
-            result.add((Element) list.item(i));
-        }
-        return result;
-    }
-
     /** Creates an element in the model namespace using the document's prefix convention. */
     public Element create(String localName) {
         String prefix = definitions.getPrefix();
         return dom.createElementNS(ns(), prefix == null ? localName : prefix + ":" + localName);
+    }
+
+    /** Creates an element in the model namespace with a fresh id starting with {@code idPrefix}. */
+    public Element createWithId(String localName, String idPrefix) {
+        Element element = create(localName);
+        element.setAttribute("id", uniqueId(idPrefix));
+        return element;
     }
 
     /** Creates a DMNDI / DC / DI element, declaring the namespace prefix on the root if needed. */

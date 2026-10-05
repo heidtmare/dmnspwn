@@ -45,8 +45,7 @@ public final class ConnectionEditor {
         }
 
         if (kind == ConnectionKind.ASSOCIATION) {
-            Element assoc = doc.create(kind.localName());
-            assoc.setAttribute("id", doc.uniqueId("Association"));
+            Element assoc = doc.createWithId(kind.localName(), "Association");
             Element src = doc.create("sourceRef");
             src.setAttribute("href", Href.local(sourceId));
             Element tgt = doc.create("targetRef");

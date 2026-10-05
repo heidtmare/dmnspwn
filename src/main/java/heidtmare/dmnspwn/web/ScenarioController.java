@@ -62,7 +62,7 @@ public class ScenarioController {
                        @RequestParam(defaultValue = "") String decision, @RequestParam(defaultValue = "") String name,
                        RedirectAttributes flash) {
         ModelEvaluator evaluator = new ModelEvaluator(models.reader(id), feel);
-        Evaluation result = EvaluationForm.of(params, decision, null).evaluate(evaluator);
+        Evaluation result = EvaluateController.EvaluationForm.of(params, decision, null).evaluate(evaluator);
         if (result.hasInputErrors()) {
             throw new InvalidScenarioException("Fix the input values before saving them as a test");
         }

@@ -189,9 +189,8 @@ public final class TestCases {
 
     private static Val value(Feel feel, Scenario s, String element, String text) {
         Feel.Result r = feel.evaluate(text == null || text.isBlank() ? "null" : text, Scope.empty());
-        if (r.failed() || !r.warnings().isEmpty()) {
-            throw new InvalidScenarioException("Test '" + s.name() + "', " + element + ": "
-                    + (r.failed() ? r.error() : String.join("; ", r.warnings())));
+        if (r.problem() != null) {
+            throw new InvalidScenarioException("Test '" + s.name() + "', " + element + ": " + r.problem());
         }
         return r.value();
     }

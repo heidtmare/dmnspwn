@@ -50,10 +50,6 @@ public enum ElementKind {
         return name().toLowerCase().replace('_', '-');
     }
 
-    public boolean isDrgElement() {
-        return this != TEXT_ANNOTATION;
-    }
-
     /** Elements carrying a {@code <variable>} information item. */
     public boolean hasVariable() {
         return this == DECISION || this == INPUT_DATA || this == BUSINESS_KNOWLEDGE_MODEL

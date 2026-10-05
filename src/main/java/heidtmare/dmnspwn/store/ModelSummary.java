@@ -8,7 +8,8 @@ import java.time.format.DateTimeFormatter;
 public record ModelSummary(String id, String name, String version, String namespace, int decisions, int elements,
                            Instant updated, String error) {
 
-    private static final DateTimeFormatter FORMAT =
+    /** How times are shown on all pages. */
+    public static final DateTimeFormatter FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     public String updatedText() {

@@ -1,6 +1,8 @@
 package heidtmare.dmnspwn.web;
 
+import java.io.Serializable;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Controller;
@@ -22,8 +24,8 @@ import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.Views.ElementView;
 import heidtmare.dmnspwn.scenario.Scenario;
 import heidtmare.dmnspwn.scenario.ScenarioService;
-import heidtmare.dmnspwn.scenario.TestReport.Check;
-import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.Check;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.ScenarioResult;
 import heidtmare.dmnspwn.store.ModelService;
 
 import jakarta.servlet.http.HttpSession;
@@ -134,5 +136,39 @@ public class EvaluateController {
 
     private static String key(String id) {
         return "evaluate:" + id;
+    }
+
+    /**
+     * The values of the evaluation form: input texts keyed by input data id, the decision to evaluate (blank: all) and
+     * an optional ad-hoc FEEL expression. Kept in the session between visits.
+     */
+    static record EvaluationForm(Map<String, String> inputs, String decision, String expression) implements Serializable {
+
+        static final String INPUT_PREFIX = "in.";
+        static final EvaluationForm EMPTY = new EvaluationForm(Map.of(), "", "");
+
+        /** The form as posted: inputs come from the {@code in.<id>} fields. */
+        static EvaluationForm of(Map<String, String> params, String decision, String expression) {
+            Map<String, String> inputs = new LinkedHashMap<>();
+            params.forEach((k, v) -> {
+                if (k.startsWith(INPUT_PREFIX)) {
+                    inputs.put(k.substring(INPUT_PREFIX.length()), v);
+                }
+            });
+            return new EvaluationForm(inputs, decision, expression);
+        }
+
+        EvaluationForm withDecision(String decision) {
+            return new EvaluationForm(inputs, decision, expression);
+        }
+
+        /** The decision ids to evaluate; empty for all. */
+        List<String> requested() {
+            return decision.isBlank() ? List.of() : List.of(decision);
+        }
+
+        Evaluation evaluate(ModelEvaluator evaluator) {
+            return evaluator.evaluate(inputs, requested(), expression);
+        }
     }
 }

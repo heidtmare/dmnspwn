@@ -57,6 +57,11 @@ public class Feel {
         public boolean failed() {
             return error != null;
         }
+
+        /** The error, else the warnings joined; null for a clean result. */
+        public String problem() {
+            return failed() ? error : warnings.isEmpty() ? null : String.join("; ", warnings);
+        }
     }
 
     private record Parsed(ParsedExpression expression, String error) {

@@ -23,7 +23,7 @@ import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
 import heidtmare.dmnspwn.edit.Forms.ElementForm;
 import heidtmare.dmnspwn.edit.Forms.ParametersForm;
 import heidtmare.dmnspwn.edit.Forms.ServiceForm;
-import heidtmare.dmnspwn.edit.LogicType;
+import heidtmare.dmnspwn.edit.LogicEditor.LogicType;
 import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.ElementKind;
@@ -150,20 +150,20 @@ public class ElementController {
         }
         pages.common(model, id, reader);
         model.addAttribute("element", element);
-        model.addAttribute("logicTypes", LogicType.available(reader.document().ns()));
         ExpressionView logic = element.logic();
         if (!raw && logic instanceof ExpressionView.DecisionTable table) {
+            model.addAttribute("logicLabel", "Decision table");
             model.addAttribute("table", table);
             model.addAttribute("hitPolicies", HitPolicy.values());
             model.addAttribute("aggregations", DecisionTableEditor.AGGREGATIONS);
-            return "logic-table";
-        }
-        if (!raw && logic instanceof ExpressionView.Literal literal) {
+        } else if (!raw && logic instanceof ExpressionView.Literal literal) {
+            model.addAttribute("logicLabel", "Literal expression");
             model.addAttribute("literal", literal);
-            return "logic-literal";
+        } else {
+            model.addAttribute("logicLabel", logic == null ? "No logic" : element.logicName());
+            model.addAttribute("xml", reader.logicXml(elementId).orElse(""));
         }
-        model.addAttribute("xml", reader.logicXml(elementId).orElse(""));
-        return "logic-xml";
+        return "logic";
     }
 
     @PostMapping("/logic/decision-table")

@@ -80,6 +80,10 @@ class S3StorageWebTest {
         assertThatThrownBy(() -> new DmnProperties(DmnProperties.Storage.S3, Path.of("x"), false, 1, disabled))
                 .hasMessageContaining("dmnspwn.s3.enabled=true");
         DmnProperties.S3 s3 = TestModels.s3Properties(DmnProperties.Storage.FILE, Path.of("x"), 1).s3();
+        DmnProperties.S3 noBucket = new DmnProperties.S3(true, " ", "dmn/", "store/", null, null, false,
+                s3.maxObjectSize(), s3.timeout());
+        assertThatThrownBy(() -> new DmnProperties(DmnProperties.Storage.FILE, Path.of("x"), false, 1, noBucket))
+                .hasMessageContaining("dmnspwn.s3.bucket must be set");
         DmnProperties.S3 overlapping = new DmnProperties.S3(true, "b", "dmn/", "dmn/store/", null, null, false,
                 s3.maxObjectSize(), s3.timeout());
         assertThatThrownBy(() -> new DmnProperties(DmnProperties.Storage.S3, Path.of("x"), false, 1, overlapping))

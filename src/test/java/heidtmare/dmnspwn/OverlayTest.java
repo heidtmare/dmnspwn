@@ -12,12 +12,11 @@ import heidtmare.dmnspwn.diagram.Overlay.Status;
 import heidtmare.dmnspwn.eval.Evaluation;
 import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
 import heidtmare.dmnspwn.eval.Evaluation.InputResult;
-import heidtmare.dmnspwn.eval.Trace;
 import heidtmare.dmnspwn.eval.Values;
 
 class OverlayTest {
 
-    private static DecisionResult decision(String id, Trace.Message... messages) {
+    private static DecisionResult decision(String id, Evaluation.Message... messages) {
         return new DecisionResult(id, id, null, Values.number(1), List.of(messages), List.of(), false, true);
     }
 
@@ -26,9 +25,9 @@ class OverlayTest {
         Evaluation result = new Evaluation(
                 List.of(new InputResult("in1", "In 1", "1", Values.number(1), null),
                         new InputResult("in2", "In 2", "oops", null, "bad input")),
-                List.of(decision("ok"), decision("warn", new Trace.Message(false, "careful")),
-                        decision("err", new Trace.Message(true, "failed")),
-                        decision("diff", new Trace.Message(false, "note"))),
+                List.of(decision("ok"), decision("warn", new Evaluation.Message(false, "careful")),
+                        decision("err", new Evaluation.Message(true, "failed")),
+                        decision("diff", new Evaluation.Message(false, "note"))),
                 null);
 
         Overlay overlay = Overlay.of(result, Map.of("diff", "2"));

@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 
 import heidtmare.dmnspwn.edit.DmnEditor;
-import heidtmare.dmnspwn.edit.LogicType;
+import heidtmare.dmnspwn.edit.LogicEditor.LogicType;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.validate.DmnValidator;
-import heidtmare.dmnspwn.validate.Issue;
+import heidtmare.dmnspwn.validate.DmnValidator.Issue;
 import heidtmare.dmnspwn.xml.DmnDocument;
 
 class DmnValidatorTest {

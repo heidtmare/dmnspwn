@@ -96,7 +96,7 @@ public interface ModelStore {
 
     static String requireValidId(String id) {
         if (!isValid(id)) {
-            throw new ModelNotFoundException(String.valueOf(id));
+            throw NotFoundException.model(String.valueOf(id));
         }
         return id;
     }

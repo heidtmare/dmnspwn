@@ -33,7 +33,7 @@ import heidtmare.dmnspwn.xml.DmnFormatException;
 @Service
 public class ModelService {
 
-    static final int ATTEMPTS = 5;
+    private static final int ATTEMPTS = 5;
 
     private final ModelStore store;
     /** Serializes changes of one model within this instance, so that they do not conflict with each other. */
@@ -90,16 +90,16 @@ public class ModelService {
         return current(id).content();
     }
 
-    /** Fails with {@link ModelNotFoundException} unless the model exists; cheaper than reading it. */
+    /** Fails with {@link NotFoundException} unless the model exists; cheaper than reading it. */
     public void requireExists(String id) {
         if (!store.exists(id)) {
-            throw new ModelNotFoundException(id);
+            throw NotFoundException.model(id);
         }
     }
 
     /** The model's content and version. */
     public Stored current(String id) {
-        return store.read(id).orElseThrow(() -> new ModelNotFoundException(id));
+        return store.read(id).orElseThrow(() -> NotFoundException.model(id));
     }
 
     public DmnDocument load(String id) {

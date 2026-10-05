@@ -14,11 +14,10 @@ import heidtmare.dmnspwn.eval.Feel;
 import heidtmare.dmnspwn.eval.InputForms.InputField;
 import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.eval.Scope;
-import heidtmare.dmnspwn.eval.Trace;
 import heidtmare.dmnspwn.eval.Values;
 import heidtmare.dmnspwn.model.Views.ElementView;
-import heidtmare.dmnspwn.scenario.TestReport.Check;
-import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.Check;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.ScenarioResult;
 
 /** Runs scenarios against one model and captures new scenarios from evaluations. */
 public final class ScenarioRunner {
@@ -84,15 +83,14 @@ public final class ScenarioRunner {
         ElementView decision = decisions.get(name);
         if (decision == null) {
             return new Check(name, null, text, "", false,
-                    List.of(new Trace.Message(true, "Decision '" + name + "' is not in the model")), List.of(), false);
+                    List.of(new Evaluation.Message(true, "Decision '" + name + "' is not in the model")), List.of(), false);
         }
         DecisionResult result = actual.get(decision.id());
-        List<Trace.Message> messages = new ArrayList<>(result.messages());
+        List<Evaluation.Message> messages = new ArrayList<>(result.messages());
         Feel.Result expected = feel.evaluate(text == null || text.isBlank() ? "null" : text, Scope.empty());
         boolean passed;
-        if (expected.failed() || !expected.warnings().isEmpty()) {
-            messages.addFirst(new Trace.Message(true, "Expected value is invalid: "
-                    + (expected.failed() ? expected.error() : String.join("; ", expected.warnings()))));
+        if (expected.problem() != null) {
+            messages.addFirst(new Evaluation.Message(true, "Expected value is invalid: " + expected.problem()));
             passed = false;
         } else {
             passed = Values.same(expected.value(), result.value());
@@ -128,5 +126,35 @@ public final class ScenarioRunner {
             case "", "function" -> false;
             default -> true;
         };
+    }
+
+    /** The outcome of running a model's scenarios; {@code error} is set when the test file could not be read. */
+    public record TestReport(List<ScenarioResult> results, String error) {
+
+        public static final TestReport EMPTY = new TestReport(List.of(), null);
+
+        /** One expected decision result compared with the actual one. */
+        public record Check(String decision, String decisionId, String expected, String actual, boolean passed,
+                            List<Evaluation.Message> messages, List<Integer> matchedRules, boolean table) {
+        }
+
+        /** One scenario; {@code errors} are problems that stop it from being checked, such as unknown inputs. */
+        public record ScenarioResult(int index, Scenario scenario, List<String> errors, List<Check> checks) {
+            public boolean passed() {
+                return errors.isEmpty() && !checks.isEmpty() && checks.stream().allMatch(Check::passed);
+            }
+        }
+
+        public int total() {
+            return results.size();
+        }
+
+        public long failed() {
+            return results.stream().filter(r -> !r.passed()).count();
+        }
+
+        public long passed() {
+            return total() - failed();
+        }
     }
 }

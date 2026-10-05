@@ -11,7 +11,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.s3.ConditionalOnS3Enabled;
-import heidtmare.dmnspwn.s3.S3ConflictException;
 import heidtmare.dmnspwn.s3.S3StoreException;
 import heidtmare.dmnspwn.s3.S3Sync;
 import heidtmare.dmnspwn.store.ModelService;
@@ -70,7 +69,7 @@ public class S3Controller {
         try {
             String target = sync.publish(id, key, force);
             flash.addFlashAttribute("success", "Published to " + sync.bucket().location(target));
-        } catch (S3ConflictException e) {
+        } catch (S3StoreException.Conflict e) {
             flash.addFlashAttribute("error", e.getMessage());
             flash.addFlashAttribute("conflictKey", e.key());
         }

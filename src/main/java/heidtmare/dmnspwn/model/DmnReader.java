@@ -134,7 +134,7 @@ public final class DmnReader {
     }
 
     /** The requirement and association elements behind {@link #connections()}. */
-    public List<ConnectionElement> connectionElements() {
+    private List<ConnectionElement> connectionElements() {
         if (connectionElements == null) {
             connectionElements = ConnectionElement.all(doc);
         }

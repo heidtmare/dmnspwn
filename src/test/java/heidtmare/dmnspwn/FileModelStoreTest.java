@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import heidtmare.dmnspwn.store.FileModelStore;
-import heidtmare.dmnspwn.store.ModelNotFoundException;
+import heidtmare.dmnspwn.store.NotFoundException;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelStore.Entry;
@@ -79,7 +79,7 @@ class FileModelStoreTest extends ModelStoreContract {
     void rejectsInvalidIdsBeforeLocking() {
         ModelService models = new ModelService(store(1));
 
-        assertThatThrownBy(() -> models.atomically("../m", () -> null)).isInstanceOf(ModelNotFoundException.class);
+        assertThatThrownBy(() -> models.atomically("../m", () -> null)).isInstanceOf(NotFoundException.class);
     }
 
     @Test

@@ -17,6 +17,7 @@ import java.util.function.Supplier;
 import org.camunda.feel.syntaxtree.Val;
 import org.camunda.feel.syntaxtree.ValFunction;
 
+import heidtmare.dmnspwn.eval.Interpreter.Trace;
 import heidtmare.dmnspwn.eval.Evaluation.DecisionResult;
 import heidtmare.dmnspwn.eval.Evaluation.ExpressionResult;
 import heidtmare.dmnspwn.eval.Evaluation.InputResult;
@@ -78,9 +79,7 @@ public final class ModelEvaluator {
             String error = null;
             if (!text.isBlank()) {
                 Feel.Result r = feel.evaluate(text, Scope.empty());
-                if (r.failed() || !r.warnings().isEmpty()) {
-                    error = r.failed() ? r.error() : String.join("; ", r.warnings());
-                }
+                error = r.problem();
                 value = r.value();
             }
             run.inputs.put(field.id(), value);
@@ -247,11 +246,7 @@ public final class ModelEvaluator {
                     }
                     inner.done.forEach((decisionId, t) -> t.messages().forEach(m -> {
                         String text = service.name() + " › " + elements.get(decisionId).name() + ": " + m.text();
-                        if (m.error()) {
-                            trace().error(text);
-                        } else {
-                            trace().warning(text);
-                        }
+                        trace().add(new Evaluation.Message(m.error(), text));
                     }));
                     return outputs.size() == 1 ? outputs.values().iterator().next() : Values.context(outputs);
                 }, false);

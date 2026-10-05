@@ -17,7 +17,7 @@ import heidtmare.dmnspwn.scenario.InvalidScenarioException;
 import heidtmare.dmnspwn.scenario.Scenario;
 import heidtmare.dmnspwn.scenario.ScenarioRunner;
 import heidtmare.dmnspwn.scenario.TestCases;
-import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
+import heidtmare.dmnspwn.scenario.ScenarioRunner.TestReport.ScenarioResult;
 import heidtmare.dmnspwn.xml.DmnFormatException;
 
 class ScenarioTest {
