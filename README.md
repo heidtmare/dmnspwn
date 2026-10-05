@@ -20,6 +20,13 @@ mvn package && java -jar target/dmnspwn-0.1.0-SNAPSHOT.jar
 Models are stored as plain `.dmn` files (with their test scenarios as `.tests.xml`) in `./dmn-models` (two samples are copied there on first start).
 Configure with `dmnspwn.storage-directory`, `dmnspwn.seed-samples`, `dmnspwn.history-size`.
 
+An example container image (non-root, UID 10001, port 8080; amd64 and arm64/Graviton) for e.g. Amazon EKS:
+
+```bash
+docker build -t dmnspwn .
+docker run -p 8080:8080 dmnspwn
+```
+
 Behind a load balancer or ingress, `X-Forwarded-*` headers are honoured. Container probes:
 `/actuator/health/liveness` and `/actuator/health/readiness` (no other actuator endpoints are exposed).
 
