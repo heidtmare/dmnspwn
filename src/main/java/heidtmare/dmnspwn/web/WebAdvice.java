@@ -16,6 +16,7 @@ import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditException;
 import heidtmare.dmnspwn.s3.S3StoreException;
 import heidtmare.dmnspwn.store.NotFoundException;
+import heidtmare.dmnspwn.store.StoreConflictException;
 import heidtmare.dmnspwn.xml.DmnFormatException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -75,6 +76,13 @@ public class WebAdvice {
     @ExceptionHandler(S3StoreException.class)
     public String s3Failed(S3StoreException e, HttpServletRequest request, HttpServletResponse response, Model model) {
         return failed(HttpStatus.BAD_GATEWAY, e.getMessage(), request, response, model);
+    }
+
+    /** Another instance kept changing the model while this change was being applied. */
+    @ExceptionHandler(StoreConflictException.class)
+    public String conflict(StoreConflictException e, HttpServletRequest request, HttpServletResponse response,
+                           Model model) {
+        return failed(HttpStatus.CONFLICT, e.getMessage(), request, response, model);
     }
 
     /**

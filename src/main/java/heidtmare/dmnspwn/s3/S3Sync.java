@@ -13,7 +13,7 @@ import java.util.Properties;
 import org.springframework.stereotype.Service;
 
 import heidtmare.dmnspwn.s3.S3Bucket.RemoteObject;
-import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.xml.DmnDocument;
 
@@ -47,12 +47,12 @@ public class S3Sync {
 
     private final S3Bucket bucket;
     private final ModelService models;
-    private final ModelRepository repository;
+    private final ModelStore store;
 
-    public S3Sync(S3Bucket bucket, ModelService models, ModelRepository repository) {
+    public S3Sync(S3Bucket bucket, ModelService models, ModelStore store) {
         this.bucket = bucket;
         this.models = models;
-        this.repository = repository;
+        this.store = store;
     }
 
     public S3Bucket bucket() {
@@ -60,7 +60,10 @@ public class S3Sync {
     }
 
     public Optional<Link> link(String id) {
-        Properties p = repository.readMeta(id);
+        return link(store.readMeta(id));
+    }
+
+    private static Optional<Link> link(Properties p) {
         String key = p.getProperty(KEY);
         if (key == null) {
             return Optional.empty();
@@ -73,8 +76,12 @@ public class S3Sync {
     /** Local model ids by linked S3 key. */
     public Map<String, String> linkedModels() {
         Map<String, String> result = new LinkedHashMap<>();
-        for (String id : repository.ids()) {
-            link(id).ifPresent(l -> result.putIfAbsent(l.key(), id));
+        Map<String, Properties> meta = store.readAllMeta();
+        for (ModelStore.Entry entry : store.list()) {
+            Properties p = meta.get(entry.id());
+            if (p != null) {
+                link(p).ifPresent(l -> result.putIfAbsent(l.key(), entry.id()));
+            }
         }
         return result;
     }
@@ -88,7 +95,7 @@ public class S3Sync {
         DmnDocument.parse(object.content());
         String existing = linkedModels().get(object.key());
         if (existing != null) {
-            return models.withLock(existing, () -> {
+            return models.atomically(existing, () -> {
                 if (localChanged(existing)) {
                     throw new S3StoreException(("Model '%s' is linked to %s and has unpublished local changes. "
                             + "Open it and publish them, or use 'Pull from S3' to discard them.")
@@ -110,7 +117,7 @@ public class S3Sync {
         Link link = link(id).orElseThrow(() -> new S3StoreException("This model is not linked to an S3 object"));
         RemoteObject object = bucket.get(link.key());
         DmnDocument.parse(object.content());
-        models.withLock(id, () -> {
+        models.atomically(id, () -> {
             models.replaceSource(id, object.content());
             remember(id, object.key(), object.etag(), object.content());
             return null;
@@ -140,10 +147,10 @@ public class S3Sync {
     }
 
     public void unlink(String id) {
-        models.withLock(id, () -> {
-            Properties p = repository.readMeta(id);
+        models.atomically(id, () -> {
+            Properties p = store.readMeta(id);
             p.keySet().removeIf(k -> k.toString().startsWith("s3."));
-            repository.writeMeta(id, p);
+            store.writeMeta(id, p);
             return null;
         });
     }
@@ -174,8 +181,8 @@ public class S3Sync {
 
     /** Records a sync; the metadata is read, changed and written under the model's lock. */
     private void remember(String id, String key, String etag, String content) {
-        models.withLock(id, () -> {
-            Properties p = repository.readMeta(id);
+        models.atomically(id, () -> {
+            Properties p = store.readMeta(id);
             p.setProperty(KEY, key);
             if (etag == null) {
                 p.remove(ETAG);
@@ -184,7 +191,7 @@ public class S3Sync {
             }
             p.setProperty(HASH, sha256(content));
             p.setProperty(SYNCED, Instant.now().toString());
-            repository.writeMeta(id, p);
+            store.writeMeta(id, p);
             return null;
         });
     }

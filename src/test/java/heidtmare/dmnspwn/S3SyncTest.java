@@ -3,14 +3,11 @@ package heidtmare.dmnspwn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.net.URI;
 import java.nio.file.Path;
-import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.util.unit.DataSize;
 
 import software.amazon.awssdk.auth.credentials.internal.WebIdentityCredentialsUtils;
 
@@ -20,7 +17,8 @@ import heidtmare.dmnspwn.s3.S3Bucket;
 import heidtmare.dmnspwn.s3.S3ConflictException;
 import heidtmare.dmnspwn.s3.S3StoreException;
 import heidtmare.dmnspwn.s3.S3Sync;
-import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.FileModelStore;
+import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
 
 class S3SyncTest {
@@ -34,12 +32,11 @@ class S3SyncTest {
 
     @BeforeEach
     void setUp() {
-        DmnProperties props = new DmnProperties(dir, false, 10, new DmnProperties.S3(true, "bucket", "/dmn",
-                "us-east-1", (URI) null, false, DataSize.ofKilobytes(64), Duration.ofSeconds(5)));
-        ModelRepository repo = new ModelRepository(props);
-        models = new ModelService(repo);
+        DmnProperties props = TestModels.s3Properties(DmnProperties.Storage.FILE, dir, 10);
+        ModelStore store = new FileModelStore(props);
+        models = new ModelService(store);
         s3 = new FakeS3Client();
-        sync = new S3Sync(new S3Bucket(s3, props), models, repo);
+        sync = new S3Sync(new S3Bucket(s3, props), models, store);
         s3.store("dmn/loan.dmn", TestModels.xml("loan-eligibility"));
         s3.store("dmn/team/dish.dmn", TestModels.xml("dish-selection"));
         s3.store("dmn/readme.txt", "hello");

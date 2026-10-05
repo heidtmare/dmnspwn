@@ -11,35 +11,42 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 
-import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.ModelStore;
+import heidtmare.dmnspwn.store.StoreConflictException;
 
-/** Copies the bundled sample models into an empty storage directory on startup. */
+/** Copies the bundled sample models into an empty store on startup. */
 @Component
 public class SampleSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SampleSeeder.class);
 
-    private final ModelRepository repository;
+    private final ModelStore store;
     private final DmnProperties properties;
 
-    public SampleSeeder(ModelRepository repository, DmnProperties properties) {
-        this.repository = repository;
+    public SampleSeeder(ModelStore store, DmnProperties properties) {
+        this.store = store;
         this.properties = properties;
     }
 
     @Override
     public void run(ApplicationArguments args) throws IOException {
-        if (!properties.seedSamples() || !repository.ids().isEmpty()) {
+        if (!properties.seedSamples() || !store.list().isEmpty()) {
             return;
         }
         Resource[] samples = new PathMatchingResourcePatternResolver().getResources("classpath:samples/*.dmn");
+        int seeded = 0;
         for (Resource sample : samples) {
             String name = sample.getFilename();
             if (name == null) {
                 continue;
             }
-            repository.write(name.replace(".dmn", ""), sample.getContentAsString(StandardCharsets.UTF_8), false);
+            try {
+                store.write(name.replace(".dmn", ""), sample.getContentAsString(StandardCharsets.UTF_8), null, false);
+                seeded++;
+            } catch (StoreConflictException e) {
+                // another instance starting at the same time seeded it
+            }
         }
-        log.info("Seeded {} sample model(s) into {}", samples.length, repository.directory());
+        log.info("Seeded {} sample model(s) into {}", seeded, store.location());
     }
 }

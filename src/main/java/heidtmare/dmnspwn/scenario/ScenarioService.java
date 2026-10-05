@@ -16,39 +16,39 @@ import heidtmare.dmnspwn.eval.ModelEvaluator;
 import heidtmare.dmnspwn.scenario.TestReport.Check;
 import heidtmare.dmnspwn.scenario.TestReport.ScenarioResult;
 import heidtmare.dmnspwn.store.ModelNotFoundException;
-import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.xml.DmnFormatException;
 
 /**
- * Stores each model's test scenarios beside it (see {@link ModelRepository#readTests}) and runs them. Reports are
+ * Stores each model's test scenarios beside it (see {@link ModelStore#readTests}) and runs them. Reports are
  * kept until the model or its scenarios change, so every page can show the test status cheaply.
  */
 @Service
 public class ScenarioService {
 
     private final ModelService models;
-    private final ModelRepository repository;
+    private final ModelStore store;
     private final Feel feel;
     private final ConcurrentHashMap<String, Cached> reports = new ConcurrentHashMap<>();
 
-    private record Cached(ModelRepository.Stamp stamp, String xml, TestReport report) {
+    private record Cached(ModelStore.Stamp stamp, String xml, TestReport report) {
     }
 
-    public ScenarioService(ModelService models, ModelRepository repository, Feel feel) {
+    public ScenarioService(ModelService models, ModelStore store, Feel feel) {
         this.models = models;
-        this.repository = repository;
+        this.store = store;
         this.feel = feel;
     }
 
     public List<Scenario> list(String id) {
-        return repository.readTests(id).map(TestCases::read).orElse(List.of());
+        return tests(id).map(TestCases::read).orElse(List.of());
     }
 
     /** The current results of the model's scenarios; an unreadable test file is reported, not thrown. */
     public TestReport report(String id) {
-        ModelRepository.Stamp stamp = repository.stamp(id).orElseThrow(() -> new ModelNotFoundException(id));
-        Optional<String> xml = repository.readTests(id);
+        ModelStore.Stamp stamp = store.stamp(id).orElseThrow(() -> new ModelNotFoundException(id));
+        Optional<String> xml = tests(id);
         if (xml.isEmpty()) {
             reports.remove(id);
             return TestReport.EMPTY;
@@ -122,16 +122,21 @@ public class ScenarioService {
     /** The model's scenarios as a TCK file. */
     public String xml(String id) {
         models.xml(id);
-        return repository.readTests(id).orElseGet(() -> TestCases.write(id + ".dmn", List.of(), feel));
+        return tests(id).orElseGet(() -> TestCases.write(id + ".dmn", List.of(), feel));
     }
 
-    /** Edits the scenario list under the model's lock; returns the size difference. */
+    private Optional<String> tests(String id) {
+        return store.readTests(id).map(ModelStore.Stored::content);
+    }
+
+    /** Edits the scenario list (see {@link ModelService#atomically}); returns the size difference. */
     private int change(String id, UnaryOperator<List<Scenario>> edit) {
-        return models.withLock(id, () -> {
+        return models.atomically(id, () -> {
             models.xml(id);
-            List<Scenario> before = list(id);
+            ModelStore.Stored current = store.readTests(id).orElse(null);
+            List<Scenario> before = current == null ? List.of() : TestCases.read(current.content());
             List<Scenario> after = edit.apply(new ArrayList<>(before));
-            repository.writeTests(id, after.isEmpty() ? null : TestCases.write(id + ".dmn", after, feel));
+            store.writeTests(id, after.isEmpty() ? null : TestCases.write(id + ".dmn", after, feel), current);
             return after.size() - before.size();
         });
     }

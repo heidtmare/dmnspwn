@@ -23,6 +23,39 @@ Configure with `dmnspwn.storage-directory`, `dmnspwn.seed-samples`, `dmnspwn.his
 Behind a load balancer or ingress, `X-Forwarded-*` headers are honoured. Container probes:
 `/actuator/health/liveness` and `/actuator/health/readiness` (no other actuator endpoints are exposed).
 
+## Running several instances (S3 storage)
+
+File storage suits a single instance. To run several (e.g. Kubernetes replicas), store the models in S3 instead,
+so that no persistent volume is needed and every instance works on the same data:
+
+```yaml
+dmnspwn:
+  storage: s3
+  s3:
+    enabled: true
+    bucket: my-decision-models
+    storage-prefix: dmnspwn/   # models, undo history and tests; must not overlap s3.prefix
+```
+
+```
+dmnspwn/<id>.dmn                       the model
+dmnspwn/<id>.tests.xml                 its test scenarios
+dmnspwn/.history/<id>/<revision>.dmn   previous versions, for undo
+dmnspwn/.meta/<id>.properties          the model's link to a published object
+```
+
+- Every change is a conditional write (`If-Match` on the ETag that was read, `If-None-Match: *` for a new model or
+  test file). When another instance changed the model in the meantime, the change is applied again to the new
+  version, so concurrent edits are never lost; after five attempts the user is asked to try again.
+- Undo history is numbered by a revision counter kept in the model object's metadata, not by clocks.
+- Contents are cached per instance and revalidated with a conditional GET, so a change made by any instance is
+  seen on the next page load.
+- Flash messages are kept in a cookie, so sticky sessions are not required. The evaluator remembers its last
+  inputs in the HTTP session; without sticky sessions it may forget them when a request reaches another instance.
+- Additional IAM action for storage: `s3:DeleteObject` on the storage prefix. Requires an S3 that supports
+  conditional writes (AWS S3, MinIO). Set `dmnspwn.seed-samples=false` unless an empty bucket should get the
+  samples.
+
 ## Loading from and publishing to AWS S3
 
 Disabled by default. Enable it with configuration (or the matching `DMNSPWN_S3_*` environment variables):
@@ -32,14 +65,15 @@ dmnspwn:
   s3:
     enabled: true
     bucket: my-decision-models
-    prefix: dmn/           # the app only reads and writes keys under this prefix
+    prefix: dmn/           # loading and publishing only read and write keys under this prefix
     region: eu-west-1      # optional; defaults to the SDK region chain
     # endpoint: http://localhost:9000   # S3-compatible stores (MinIO, LocalStack)
     # path-style: true
 ```
 
 Credentials come from the AWS SDK default provider chain (`AWS_*` environment variables, `~/.aws` profiles / SSO,
-ECS task roles, EKS IRSA / Pod Identity, EC2 instance roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`.
+ECS task roles, EKS IRSA / Pod Identity, EC2 instance roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`
+(and `s3:DeleteObject` on the storage prefix with `storage: s3`).
 
 - **Load from S3** (home page) browses the prefix and imports `.dmn` / `.xml` objects as local models.
 - Each model gets an **S3** tab showing its linked object, whether the local copy or the S3 object changed

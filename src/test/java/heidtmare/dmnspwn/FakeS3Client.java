@@ -6,6 +6,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -17,6 +18,8 @@ import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -29,19 +32,35 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
-/** In-memory S3 with ETags and conditional writes (If-Match / If-None-Match), for tests. */
+/**
+ * In-memory S3 with ETags, user metadata, conditional writes (If-Match / If-None-Match) and conditional reads
+ * (If-None-Match), for tests. Thread-safe, so that several stores can share it like instances share a bucket.
+ */
 public class FakeS3Client implements S3Client {
 
-    record Stored(byte[] bytes, String etag, Instant modified) {
+    record Stored(byte[] bytes, String etag, Instant modified, Map<String, String> metadata) {
     }
 
-    final Map<String, Stored> objects = new TreeMap<>();
+    final Map<String, Stored> objects = Collections.synchronizedMap(new TreeMap<>());
     private final AtomicInteger version = new AtomicInteger();
-    final List<PutObjectRequest> puts = new ArrayList<>();
+    final List<PutObjectRequest> puts = Collections.synchronizedList(new ArrayList<>());
+    /** GET requests answered with 200 / 304. */
+    final AtomicInteger fullReads = new AtomicInteger();
+    final AtomicInteger notModified = new AtomicInteger();
 
     public void store(String key, String content) {
+        store(key, content, Map.of());
+    }
+
+    private void store(String key, String content, Map<String, String> metadata) {
         objects.put(key, new Stored(content.getBytes(StandardCharsets.UTF_8), "\"v" + version.incrementAndGet() + "\"",
-                Instant.now()));
+                Instant.now(), Map.copyOf(metadata)));
+    }
+
+    private Map<String, Stored> snapshot() {
+        synchronized (objects) {
+            return new TreeMap<>(objects);
+        }
     }
 
     public String content(String key) {
@@ -58,11 +77,13 @@ public class FakeS3Client implements S3Client {
     }
 
     @Override
-    public ListObjectsV2Response listObjectsV2(ListObjectsV2Request request) {
+    public synchronized ListObjectsV2Response listObjectsV2(ListObjectsV2Request request) {
         String prefix = request.prefix() == null ? "" : request.prefix();
         List<S3Object> contents = new ArrayList<>();
         List<CommonPrefix> prefixes = new ArrayList<>();
-        objects.forEach((key, o) -> {
+        snapshot().entrySet().forEach(e -> {
+            String key = e.getKey();
+            Stored o = e.getValue();
             if (!key.startsWith(prefix)) {
                 return;
             }
@@ -86,8 +107,13 @@ public class FakeS3Client implements S3Client {
         if (o == null) {
             throw notFound();
         }
+        if (o.etag().equals(request.ifNoneMatch())) {
+            notModified.incrementAndGet();
+            throw (S3Exception) S3Exception.builder().statusCode(304).build();
+        }
+        fullReads.incrementAndGet();
         GetObjectResponse response = GetObjectResponse.builder().eTag(o.etag()).contentLength((long) o.bytes().length)
-                .build();
+                .lastModified(o.modified()).metadata(o.metadata()).build();
         try {
             return transformer.transform(response, AbortableInputStream.create(new ByteArrayInputStream(o.bytes())));
         } catch (Exception e) {
@@ -101,11 +127,18 @@ public class FakeS3Client implements S3Client {
         if (o == null) {
             throw notFound();
         }
-        return HeadObjectResponse.builder().eTag(o.etag()).contentLength((long) o.bytes().length).build();
+        return HeadObjectResponse.builder().eTag(o.etag()).contentLength((long) o.bytes().length)
+                .lastModified(o.modified()).metadata(o.metadata()).build();
     }
 
     @Override
-    public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
+    public DeleteObjectResponse deleteObject(DeleteObjectRequest request) {
+        objects.remove(request.key());
+        return DeleteObjectResponse.builder().build();
+    }
+
+    @Override
+    public synchronized PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
         puts.add(request);
         Stored existing = objects.get(request.key());
         if (request.ifMatch() != null && (existing == null || !existing.etag().equals(request.ifMatch()))
@@ -116,7 +149,7 @@ public class FakeS3Client implements S3Client {
                     .build();
         }
         try (var in = body.contentStreamProvider().newStream()) {
-            store(request.key(), new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            store(request.key(), new String(in.readAllBytes(), StandardCharsets.UTF_8), request.metadata());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

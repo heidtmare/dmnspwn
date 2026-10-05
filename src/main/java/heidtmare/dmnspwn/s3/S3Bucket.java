@@ -205,7 +205,7 @@ public class S3Bucket {
         return parent.length() < root().length() ? root() : parent;
     }
 
-    private static byte[] readLimited(InputStream in, long max, String key) throws IOException {
+    static byte[] readLimited(InputStream in, long max, String key) throws IOException {
         byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, max + 1));
         if (bytes.length > max) {
             throw new S3StoreException(key + " exceeds the size limit of " + max + " bytes");
@@ -214,11 +214,16 @@ public class S3Bucket {
     }
 
     private S3StoreException translate(SdkException e, String action) {
+        return translate(e, action, bucket());
+    }
+
+    /** A user-visible message for an SDK failure. */
+    static S3StoreException translate(SdkException e, String action, String bucket) {
         if (e instanceof S3Exception s3e && s3e.awsErrorDetails() != null) {
             String code = s3e.awsErrorDetails().errorCode();
             String detail = switch (code == null ? "" : code) {
                 case "NoSuchKey" -> "the object does not exist";
-                case "NoSuchBucket" -> "bucket '" + bucket() + "' does not exist";
+                case "NoSuchBucket" -> "bucket '" + bucket + "' does not exist";
                 case "AccessDenied" -> "access denied (check the IAM permissions for this bucket)";
                 case "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken" ->
                         "the AWS credentials were rejected (" + code + ")";

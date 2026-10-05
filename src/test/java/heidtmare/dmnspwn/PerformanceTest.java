@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -25,12 +24,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.util.unit.DataSize;
 import org.w3c.dom.Element;
 import org.camunda.feel.syntaxtree.Val;
 import org.w3c.dom.NodeList;
 
-import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.DmnEditor;
 import heidtmare.dmnspwn.edit.Forms.DecisionTableForm;
 import heidtmare.dmnspwn.eval.Evaluation;
@@ -42,7 +39,8 @@ import heidtmare.dmnspwn.model.ConnectionKind;
 import heidtmare.dmnspwn.model.DmnReader;
 import heidtmare.dmnspwn.model.Views.ConnectionView;
 import heidtmare.dmnspwn.model.Views.ElementView;
-import heidtmare.dmnspwn.store.ModelRepository;
+import heidtmare.dmnspwn.store.FileModelStore;
+import heidtmare.dmnspwn.store.ModelStore;
 import heidtmare.dmnspwn.store.ModelService;
 import heidtmare.dmnspwn.store.ModelSummary;
 import heidtmare.dmnspwn.xml.DmnDocument;
@@ -131,9 +129,7 @@ class PerformanceTest {
 
     @Test
     void listsModelsWithoutReparsingUnchangedOnes() throws Exception {
-        DmnProperties props = new DmnProperties(dir, false, 10, new DmnProperties.S3(false, "", "", "",
-                (URI) null, false, DataSize.ofKilobytes(64), Duration.ofSeconds(5)));
-        ModelRepository repo = spy(new ModelRepository(props));
+        ModelStore repo = spy(new FileModelStore(TestModels.properties(dir, 10)));
         ModelService models = new ModelService(repo);
         String loan = models.importXml("loan.dmn", TestModels.xml("loan-eligibility"));
         String dish = models.importXml("dish.dmn", TestModels.xml("dish-selection"));

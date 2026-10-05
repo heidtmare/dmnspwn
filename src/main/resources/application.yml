@@ -29,15 +29,19 @@ management:
         enabled: true
 
 dmnspwn:
+  # file: models in storage-directory (one instance only)
+  # s3:   models, undo history and tests in the S3 bucket under s3.storage-prefix (any number of instances)
+  storage: file
   storage-directory: ./dmn-models
   seed-samples: true
   history-size: 50
-  # Optional S3 bucket for loading and publishing models. Credentials come from the AWS SDK
+  # Optional S3 bucket for loading and publishing models, and for storage: s3. Credentials come from the AWS SDK
   # default provider chain (AWS_* env vars, ~/.aws profiles/SSO, container or instance roles).
   s3:
     enabled: false
     bucket:
-    prefix: dmn/
+    prefix: dmn/            # where models are loaded from and published to
+    storage-prefix: dmnspwn/  # where storage: s3 keeps models; must not overlap prefix
     region:            # e.g. eu-west-1; empty = SDK default region chain
     endpoint:          # e.g. http://localhost:9000 for MinIO / LocalStack
     path-style: false  # true for most S3-compatible stores
