@@ -74,6 +74,14 @@ class WebTest {
     }
 
     @Test
+    void exposesHealthProbesOnly() throws Exception {
+        mvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"UP\"")));
+        mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+        mvc.perform(get("/actuator/env")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rendersDiagramServerSide() throws Exception {
         mvc.perform(get("/models/loan-eligibility"))
                 .andExpect(content().string(containsString("<svg")))

@@ -8,12 +8,25 @@ spring:
 
 server:
   port: 8080
+  # Honour X-Forwarded-* from a load balancer / ingress (scheme, host, port).
+  forward-headers-strategy: native
   servlet:
     session:
       tracking-modes: cookie
   tomcat:
     # Large decision tables are posted as one form.
     max-parameter-count: 20000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      # /actuator/health/liveness and /actuator/health/readiness
+      probes:
+        enabled: true
 
 dmnspwn:
   storage-directory: ./dmn-models

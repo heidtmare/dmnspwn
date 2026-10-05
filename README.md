@@ -20,6 +20,9 @@ mvn package && java -jar target/dmnspwn-0.1.0-SNAPSHOT.jar
 Models are stored as plain `.dmn` files (with their test scenarios as `.tests.xml`) in `./dmn-models` (two samples are copied there on first start).
 Configure with `dmnspwn.storage-directory`, `dmnspwn.seed-samples`, `dmnspwn.history-size`.
 
+Behind a load balancer or ingress, `X-Forwarded-*` headers are honoured. Container probes:
+`/actuator/health/liveness` and `/actuator/health/readiness` (no other actuator endpoints are exposed).
+
 ## Loading from and publishing to AWS S3
 
 Disabled by default. Enable it with configuration (or the matching `DMNSPWN_S3_*` environment variables):
@@ -36,7 +39,7 @@ dmnspwn:
 ```
 
 Credentials come from the AWS SDK default provider chain (`AWS_*` environment variables, `~/.aws` profiles / SSO,
-ECS/EKS/EC2 roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`.
+ECS task roles, EKS IRSA / Pod Identity, EC2 instance roles). Required IAM actions on the bucket/prefix: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`.
 
 - **Load from S3** (home page) browses the prefix and imports `.dmn` / `.xml` objects as local models.
 - Each model gets an **S3** tab showing its linked object, whether the local copy or the S3 object changed

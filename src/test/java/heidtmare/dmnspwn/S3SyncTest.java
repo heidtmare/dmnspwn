@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
 
+import software.amazon.awssdk.auth.credentials.internal.WebIdentityCredentialsUtils;
+
 import heidtmare.dmnspwn.config.DmnProperties;
 import heidtmare.dmnspwn.edit.Forms.ElementForm;
 import heidtmare.dmnspwn.s3.S3Bucket;
@@ -42,6 +44,12 @@ class S3SyncTest {
         s3.store("dmn/team/dish.dmn", TestModels.xml("dish-selection"));
         s3.store("dmn/readme.txt", "hello");
         s3.store("other/secret.dmn", TestModels.xml("dish-selection"));
+    }
+
+    /** Without the STS module the default chain skips web identity credentials, which EKS IRSA relies on. */
+    @Test
+    void webIdentityCredentialsAreAvailable() {
+        assertThat(WebIdentityCredentialsUtils.factory()).isNotNull();
     }
 
     @Test
