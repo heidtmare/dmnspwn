@@ -15,6 +15,7 @@ import org.camunda.feel.syntaxtree.ValFunction;
 import heidtmare.dmnspwn.eval.Evaluation.Message;
 import heidtmare.dmnspwn.model.ExpressionView;
 import heidtmare.dmnspwn.model.ExpressionView.DecisionTable;
+import heidtmare.dmnspwn.model.ExpressionView.InputClause;
 import heidtmare.dmnspwn.model.ExpressionView.OutputClause;
 import heidtmare.dmnspwn.model.ExpressionView.Rule;
 
@@ -25,15 +26,18 @@ import scala.jdk.javaapi.CollectionConverters;
  * {@link Feel}; the boxes themselves (decision tables, contexts, invocations, …) are interpreted here.
  *
  * <p>Following DMN semantics, a failing expression yields {@code null} and is reported to the current
- * {@link Trace} instead of aborting the whole evaluation.
+ * {@link Trace} instead of aborting the whole evaluation. Likewise, a value that does not conform to its declared
+ * type (or the input/output values of a decision table) is reported and replaced by {@code null}.
  */
 final class Interpreter {
 
     private final Feel feel;
+    private final Types types;
     private final Supplier<Trace> trace;
 
-    Interpreter(Feel feel, Supplier<Trace> trace) {
+    Interpreter(Feel feel, Types types, Supplier<Trace> trace) {
         this.feel = feel;
+        this.types = types;
         this.trace = trace;
     }
 
@@ -49,8 +53,7 @@ final class Interpreter {
             case ExpressionView.Relation r -> relation(r, scope);
             case ExpressionView.ListExpr l -> Values.list(l.items().stream().map(i -> evaluate(i, scope)).toList());
             case ExpressionView.Invocation i -> invocation(i, scope);
-            case ExpressionView.Function f -> function(f.kind(), f.parameters().stream()
-                    .map(ExpressionView.Parameter::name).toList(), f.body(), scope);
+            case ExpressionView.Function f -> function(f.kind(), f.parameters(), f.body(), scope);
             case ExpressionView.Conditional c -> Values.isTrue(evaluate(c.condition(), scope))
                     ? evaluate(c.then(), scope) : evaluate(c.otherwise(), scope);
             case ExpressionView.Iterator i -> iterator(i, scope);
@@ -81,6 +84,15 @@ final class Interpreter {
         return report(feel.evaluate(text, scope), where);
     }
 
+    /** {@code value} converted to {@code typeRef}; reported and {@code null} when it does not conform. */
+    Val typed(Val value, String typeRef, Supplier<String> where) {
+        Types.Conformed c = types.conform(value, typeRef);
+        if (c.failed()) {
+            trace.get().error(where.get() + ": " + c.problem());
+        }
+        return c.value();
+    }
+
     private Val report(Feel.Result result, Supplier<String> where) {
         if (result.problem() == null) {
             return result.value();
@@ -102,9 +114,23 @@ final class Interpreter {
 
     private Val decisionTable(DecisionTable t, Scope scope) {
         List<Val> inputs = new ArrayList<>();
+        boolean conforming = true;
         for (int i = 0; i < t.inputs().size(); i++) {
+            InputClause clause = t.inputs().get(i);
             int n = i + 1;
-            inputs.add(feel(t.inputs().get(i).expression(), scope, () -> "Input " + n));
+            Val value = feel(clause.expression(), scope, () -> "Input " + n);
+            Types.Conformed c = types.conform(value, clause.typeRef());
+            String problem = c.failed() ? c.problem()
+                    : types.allowed(c.value(), clause.inputValues(), scope, "the input values");
+            if (problem != null) {
+                trace.get().error("Input " + n + ": " + problem);
+                conforming = false;
+            }
+            inputs.add(c.value());
+        }
+        if (!conforming) {
+            trace.get().matched(t.id(), List.of());
+            return Values.NULL;
         }
 
         List<Hit> hits = new ArrayList<>();
@@ -116,7 +142,8 @@ final class Interpreter {
                     String entry = o < rule.outputs().size() ? rule.outputs().get(o) : "";
                     int rn = r + 1;
                     int on = o + 1;
-                    outputs.add(feel(entry, scope, () -> "Rule " + rn + ", output " + on));
+                    outputs.add(output(t.outputs().get(o), feel(entry, scope, () -> "Rule " + rn + ", output " + on),
+                            scope, () -> "Rule " + rn + ", output " + on));
                 }
                 hits.add(new Hit(r + 1, combine(t, outputs), outputs));
             }
@@ -165,6 +192,17 @@ final class Interpreter {
         return true;
     }
 
+    /** An output entry's value checked against its clause's type and output values. */
+    private Val output(OutputClause clause, Val value, Scope scope, Supplier<String> where) {
+        Val typed = typed(value, clause.typeRef(), where);
+        String problem = types.allowed(typed, clause.outputValues(), scope, "the output values");
+        if (problem != null) {
+            trace.get().error(where.get() + ": " + problem);
+            return Values.NULL;
+        }
+        return typed;
+    }
+
     /** One output is the value itself; several form a context keyed by output name. */
     private static Val combine(DecisionTable t, List<Val> outputs) {
         if (outputs.size() == 1) {
@@ -185,7 +223,9 @@ final class Interpreter {
         List<Val> outputs = new ArrayList<>();
         for (int o = 0; o < t.outputs().size(); o++) {
             int on = o + 1;
-            outputs.add(feel(t.outputs().get(o).defaultOutput(), scope, () -> "Default output " + on));
+            OutputClause clause = t.outputs().get(o);
+            outputs.add(output(clause, feel(clause.defaultOutput(), scope, () -> "Default output " + on), scope,
+                    () -> "Default output " + on));
         }
         return combine(t, outputs);
     }
@@ -270,8 +310,9 @@ final class Interpreter {
         for (ExpressionView.ContextEntry entry : c.entries()) {
             Val value = evaluate(entry.value(), inner);
             if (entry.name() == null) {
-                return value;
+                return typed(value, entry.typeRef(), () -> "Context result");
             }
+            value = typed(value, entry.typeRef(), () -> "Context entry '" + entry.name() + "'");
             inner.put(entry.name(), value);
             entries.put(entry.name(), value);
         }
@@ -283,7 +324,9 @@ final class Interpreter {
         for (List<ExpressionView> row : r.rows()) {
             Map<String, Val> entries = new LinkedHashMap<>();
             for (int i = 0; i < r.columns().size(); i++) {
-                entries.put(r.columns().get(i).name(), i < row.size() ? evaluate(row.get(i), scope) : Values.NULL);
+                ExpressionView.Column column = r.columns().get(i);
+                Val value = i < row.size() ? evaluate(row.get(i), scope) : Values.NULL;
+                entries.put(column.name(), typed(value, column.typeRef(), () -> "Column '" + column.name() + "'"));
             }
             rows.add(Values.context(entries));
         }
@@ -302,7 +345,8 @@ final class Interpreter {
         }
         Map<String, Val> args = new LinkedHashMap<>();
         for (ExpressionView.Binding b : i.bindings()) {
-            args.put(b.name(), b.value() == null ? Values.NULL : evaluate(b.value(), scope));
+            Val value = b.value() == null ? Values.NULL : evaluate(b.value(), scope);
+            args.put(b.name(), typed(value, b.typeRef(), () -> "Argument '" + b.name() + "'"));
         }
         return invoke(i.function(), function, args);
     }
@@ -326,10 +370,14 @@ final class Interpreter {
         }
     }
 
-    /** A FEEL function whose body is a boxed expression, closing over {@code scope}. */
-    ValFunction function(String kind, List<String> params, ExpressionView body, Scope scope) {
+    /**
+     * A FEEL function whose body is a boxed expression, closing over {@code scope}. Arguments are checked against
+     * the parameter types.
+     */
+    ValFunction function(String kind, List<ExpressionView.Parameter> params, ExpressionView body, Scope scope) {
         boolean supported = kind == null || kind.isBlank() || "FEEL".equalsIgnoreCase(kind);
-        return new ValFunction(Values.scalaList(params), args -> {
+        List<String> names = params.stream().map(ExpressionView.Parameter::name).toList();
+        return new ValFunction(Values.scalaList(names), args -> {
             if (!supported) {
                 trace.get().error(kind + " functions are not supported");
                 return Values.NULL;
@@ -337,7 +385,9 @@ final class Interpreter {
             Scope call = scope.child();
             List<Val> values = CollectionConverters.asJava(args);
             for (int p = 0; p < params.size(); p++) {
-                call.put(params.get(p), p < values.size() ? values.get(p) : Values.NULL);
+                ExpressionView.Parameter param = params.get(p);
+                Val value = p < values.size() ? values.get(p) : Values.NULL;
+                call.put(param.name(), typed(value, param.typeRef(), () -> "Parameter '" + param.name() + "'"));
             }
             return evaluate(body, call);
         }, false);

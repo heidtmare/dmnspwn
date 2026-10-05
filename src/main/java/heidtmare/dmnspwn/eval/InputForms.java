@@ -1,11 +1,6 @@
 package heidtmare.dmnspwn.eval;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import heidtmare.dmnspwn.model.BuiltInTypes;
 import heidtmare.dmnspwn.model.Views.ElementView;
@@ -19,11 +14,11 @@ public final class InputForms {
     }
 
     private final Feel feel;
-    private final Map<String, ItemDefinitionView> types = new HashMap<>();
+    private final Types types;
 
-    InputForms(List<ItemDefinitionView> itemDefinitions, Feel feel) {
+    InputForms(Types types, Feel feel) {
         this.feel = feel;
-        itemDefinitions.forEach(t -> types.putIfAbsent(t.name(), t));
+        this.types = types;
     }
 
     InputField field(ElementView input) {
@@ -31,21 +26,8 @@ public final class InputForms {
                 suggestions(input.typeRef()));
     }
 
-    /**
-     * The item definitions a type reference resolves through, in order, until it reaches a name that is not an item
-     * definition (a built-in or unknown type). A cyclic definition ends the chain where it would repeat.
-     */
-    private List<ItemDefinitionView> typeChain(String typeRef) {
-        List<ItemDefinitionView> chain = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String t = typeRef; t != null && seen.add(t) && types.containsKey(t); t = types.get(t).typeRef()) {
-            chain.add(types.get(t));
-        }
-        return chain;
-    }
-
     private String placeholder(String typeRef) {
-        List<ItemDefinitionView> chain = typeChain(typeRef);
+        List<ItemDefinitionView> chain = types.chain(typeRef);
         String base = chain.isEmpty() ? typeRef : chain.getLast().typeRef();
         for (ItemDefinitionView item : chain) {
             if (item.collection()) {
@@ -85,7 +67,7 @@ public final class InputForms {
 
     /** Allowed values of the (item definition) type, as FEEL literals. */
     private List<String> suggestions(String typeRef) {
-        List<ItemDefinitionView> chain = typeChain(typeRef);
+        List<ItemDefinitionView> chain = types.chain(typeRef);
         for (ItemDefinitionView item : chain) {
             if (item.allowedValues() != null && !item.allowedValues().isBlank()) {
                 Feel.Result r = feel.evaluate("[" + item.allowedValues() + "]", Scope.empty());

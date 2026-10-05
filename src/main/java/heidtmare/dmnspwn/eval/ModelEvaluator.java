@@ -40,6 +40,7 @@ import scala.jdk.javaapi.CollectionConverters;
 public final class ModelEvaluator {
 
     private final Feel feel;
+    private final Types types;
     private final Map<String, ElementView> elements = new LinkedHashMap<>();
     private final InputForms inputForms;
     private final Feel.QuotedNames quotedNames;
@@ -49,7 +50,8 @@ public final class ModelEvaluator {
     public ModelEvaluator(DmnReader reader, Feel feel) {
         this.feel = feel;
         reader.elements().forEach(e -> elements.put(e.id(), e));
-        this.inputForms = new InputForms(reader.itemDefinitions(), feel);
+        this.types = new Types(reader.itemDefinitions(), feel);
+        this.inputForms = new InputForms(types, feel);
         this.quotedNames = Feel.QuotedNames.of(ModelNames.of(reader));
         this.decisions = elements.values().stream().filter(e -> e.kind() == ElementKind.DECISION).toList();
     }
@@ -81,6 +83,13 @@ public final class ModelEvaluator {
                 Feel.Result r = feel.evaluate(text, Scope.empty());
                 error = r.problem();
                 value = r.value();
+                if (!r.failed()) {
+                    Types.Conformed c = types.conform(value, field.typeRef());
+                    if (c.failed()) {
+                        error = error == null ? c.problem() : error + "; " + c.problem();
+                    }
+                    value = c.value();
+                }
             }
             run.inputs.put(field.id(), value);
             inputs.add(new InputResult(field.id(), field.name(), text, value, error));
@@ -144,7 +153,7 @@ public final class ModelEvaluator {
         final Set<String> evaluating = new HashSet<>();
         final Map<String, ValFunction> functions = new HashMap<>();
         final Deque<Trace> traces = new ArrayDeque<>();
-        final Interpreter interpreter = new Interpreter(feel, this::trace);
+        final Interpreter interpreter = new Interpreter(feel, types, this::trace);
 
         Run() {
             traces.push(new Trace());
@@ -174,6 +183,7 @@ public final class ModelEvaluator {
             } else {
                 Scope scope = requirements(d);
                 value = guarded(() -> interpreter.evaluate(d.logic(), scope), trace);
+                value = interpreter.typed(value, d.typeRef(), () -> "Result");
             }
             traces.pop();
             evaluating.remove(d.id());
@@ -209,7 +219,8 @@ public final class ModelEvaluator {
                     trace().error("Business knowledge model '" + bkm.name() + "' depends on itself");
                     return interpreter.function("FEEL", List.of(), null, Scope.empty());
                 }
-                List<String> params = bkm.parameters().stream().map(p -> p.name()).toList();
+                List<ExpressionView.Parameter> params = bkm.parameters().stream()
+                        .map(p -> new ExpressionView.Parameter(p.name(), p.typeRef())).toList();
                 f = interpreter.function(bkm.functionKind(), params, bkm.logic(), requirements(bkm));
                 evaluating.remove(bkm.id());
                 functions.put(bkm.id(), f);
@@ -227,7 +238,13 @@ public final class ModelEvaluator {
                     List<Val> values = CollectionConverters.asJava(args);
                     Run inner = new Run();
                     for (int i = 0; i < params.size(); i++) {
+                        RefView param = params.get(i);
+                        ElementView element = param.local() ? elements.get(param.id()) : null;
                         Val v = i < values.size() ? values.get(i) : Values.NULL;
+                        if (element != null) {
+                            v = interpreter.typed(v, element.typeRef(),
+                                    () -> service.name() + " › parameter '" + param.name() + "'");
+                        }
                         if (i < service.service().inputDecisions().size()) {
                             inner.overrides.put(params.get(i).id(), v);
                         } else {

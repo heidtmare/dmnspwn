@@ -21,6 +21,7 @@ import org.camunda.feel.syntaxtree.ValLocalDateTime;
 import org.camunda.feel.syntaxtree.ValLocalTime;
 import org.camunda.feel.syntaxtree.ValNull$;
 import org.camunda.feel.syntaxtree.ValNumber;
+import org.camunda.feel.syntaxtree.ValRange;
 import org.camunda.feel.syntaxtree.ValString;
 import org.camunda.feel.syntaxtree.ValTime;
 import org.camunda.feel.syntaxtree.ValYearMonthDuration;
@@ -222,6 +223,7 @@ public final class Values {
             case ValList l -> "list";
             case ValContext c -> "context";
             case ValFunction f -> "function";
+            case ValRange r -> "range";
             default -> isNull(v) ? "null" : "";
         };
     }

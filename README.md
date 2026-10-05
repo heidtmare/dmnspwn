@@ -76,6 +76,11 @@ expressions. Nothing is written to the model.
 - Evaluates decision tables (all hit policies and aggregations), literal expressions, contexts, relations, lists,
   invocations, function definitions, conditionals, iterators and filters. BKMs and decision services can be
   called as functions.
+- Values are checked against their declared types: input data, decision results, decision table input/output
+  clauses (including input and output values), context entries, relation columns, invocation arguments and BKM
+  parameters. Item definitions are followed through allowed values, type constraints, collections and structures,
+  with DMN's implicit conversions (singleton lists, date to date and time). A value that does not conform is
+  reported and becomes `null`; a decision table whose inputs do not conform is not evaluated.
 - An optional ad-hoc FEEL expression can refer to any input, decision, BKM or decision service by name — handy for
   probing a model without changing it.
 - Results are drawn on the DRD: every input and evaluated decision shows its value, errors and warnings are
@@ -245,7 +250,6 @@ ECS task roles, EKS IRSA / Pod Identity, EC2 instance roles). Required IAM actio
 
 ### Limitations
 
-- Evaluation does not check or coerce values against `typeRef` / allowed values.
 - Imported elements (`dmn:import`) are not resolved during evaluation.
 - Java and PMML function kinds are not executed.
 - There is no authentication or CSRF protection (see [Security](#container-image)).

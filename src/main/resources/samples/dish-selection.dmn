@@ -8,6 +8,9 @@
     <typeRef>string</typeRef>
     <allowedValues><text>"Spring","Summer","Fall","Winter"</text></allowedValues>
   </itemDefinition>
+  <itemDefinition name="tBeverages" isCollection="true">
+    <typeRef>string</typeRef>
+  </itemDefinition>
 
   <inputData id="Season" name="Season">
     <variable name="Season" typeRef="tSeason"/>
@@ -65,7 +68,7 @@
   </decision>
 
   <decision id="Beverages" name="Beverages">
-    <variable name="Beverages" typeRef="string"/>
+    <variable name="Beverages" typeRef="tBeverages"/>
     <informationRequirement><requiredDecision href="#Dish"/></informationRequirement>
     <informationRequirement><requiredInput href="#Guests_With_Children"/></informationRequirement>
     <decisionTable hitPolicy="COLLECT">

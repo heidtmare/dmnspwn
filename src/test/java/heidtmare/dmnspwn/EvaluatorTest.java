@@ -178,6 +178,117 @@ class EvaluatorTest {
     }
 
     @Test
+    void rejectsInputsThatDoNotConformToTheirType() {
+        Evaluation e = evaluator(TestModels.loan()).evaluate(Map.of(
+                "Applicant_Age", "\"30\"", "Credit_Score", "750"), List.of("Risk_Category"), null);
+        assertThat(e.inputs()).filteredOn(i -> i.id().equals("Applicant_Age")).first().satisfies(i -> {
+            assertThat(i.error()).contains("string \"30\" is not a number");
+            assertThat(i.formatted()).isEqualTo("null");
+        });
+
+        e = evaluator(TestModels.dish()).evaluate(Map.of("Season", "\"Monsoon\"", "Guest_Count", "[3]"),
+                List.of("Dish"), null);
+        assertThat(e.inputs()).filteredOn(i -> i.id().equals("Season")).first()
+                .satisfies(i -> assertThat(i.error()).contains("not in the allowed values of tSeason"));
+        // a singleton list converts to its item
+        assertThat(e.inputs()).filteredOn(i -> i.id().equals("Guest_Count")).first().satisfies(i -> {
+            assertThat(i.error()).isNull();
+            assertThat(i.formatted()).isEqualTo("3");
+        });
+    }
+
+    @Test
+    void checksResultsAgainstTypesAndTableValues() {
+        String xml = """
+                <definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="d" name="Types" namespace="urn:types">
+                  <itemDefinition name="tGrade">
+                    <typeRef>string</typeRef>
+                    <allowedValues><text>"A","B"</text></allowedValues>
+                  </itemDefinition>
+                  <itemDefinition name="tScores" isCollection="true">
+                    <typeRef>number</typeRef>
+                    <allowedValues><text>[0..100]</text></allowedValues>
+                  </itemDefinition>
+                  <itemDefinition name="tPerson">
+                    <itemComponent name="name"><typeRef>string</typeRef></itemComponent>
+                    <itemComponent name="age"><typeRef>number</typeRef></itemComponent>
+                  </itemDefinition>
+                  <decision id="Grade" name="Grade">
+                    <variable name="Grade" typeRef="tGrade"/>
+                    <literalExpression><text>"C"</text></literalExpression>
+                  </decision>
+                  <decision id="Scores" name="Scores">
+                    <variable name="Scores" typeRef="tScores"/>
+                    <literalExpression><text>[50, 101]</text></literalExpression>
+                  </decision>
+                  <decision id="One" name="One">
+                    <variable name="One" typeRef="tScores"/>
+                    <literalExpression><text>7</text></literalExpression>
+                  </decision>
+                  <decision id="Person" name="Person">
+                    <variable name="Person" typeRef="tPerson"/>
+                    <literalExpression><text>{name: "Ann", age: "old", extra: 1}</text></literalExpression>
+                  </decision>
+                  <decision id="Fine" name="Fine">
+                    <variable name="Fine" typeRef="tPerson"/>
+                    <literalExpression><text>{name: "Ann", age: 30, extra: 1}</text></literalExpression>
+                  </decision>
+                  <decision id="Day" name="Day">
+                    <variable name="Day" typeRef="date and time"/>
+                    <literalExpression><text>date("2024-01-31")</text></literalExpression>
+                  </decision>
+                  <decision id="BadInput" name="BadInput">
+                    <variable name="BadInput"/>
+                    <decisionTable>
+                      <input><inputExpression typeRef="number"><text>5</text></inputExpression>
+                        <inputValues><text>[1..3]</text></inputValues></input>
+                      <output name="v"/>
+                      <rule><inputEntry><text>-</text></inputEntry><outputEntry><text>1</text></outputEntry></rule>
+                    </decisionTable>
+                  </decision>
+                  <decision id="BadOutput" name="BadOutput">
+                    <variable name="BadOutput"/>
+                    <decisionTable>
+                      <input><inputExpression><text>5</text></inputExpression></input>
+                      <output name="v" typeRef="string"><outputValues><text>"x","y"</text></outputValues></output>
+                      <rule><inputEntry><text>-</text></inputEntry><outputEntry><text>"z"</text></outputEntry></rule>
+                    </decisionTable>
+                  </decision>
+                  <businessKnowledgeModel id="Twice" name="Twice">
+                    <variable name="Twice"/>
+                    <encapsulatedLogic>
+                      <formalParameter name="n" typeRef="number"/>
+                      <literalExpression><text>if n = null then "null" else n * 2</text></literalExpression>
+                    </encapsulatedLogic>
+                  </businessKnowledgeModel>
+                  <decision id="Call" name="Call">
+                    <variable name="Call"/>
+                    <knowledgeRequirement><requiredKnowledge href="#Twice"/></knowledgeRequirement>
+                    <literalExpression><text>Twice("2")</text></literalExpression>
+                  </decision>
+                </definitions>
+                """;
+        Evaluation e = evaluator(DmnDocument.parse(xml)).evaluate(Map.of(), List.of(), null);
+        assertThat(decision(e, "Grade").formatted()).isEqualTo("null");
+        assertThat(decision(e, "Grade").messages()).extracting(Evaluation.Message::text)
+                .containsExactly("Result: string \"C\" is not in the allowed values of tGrade (\"A\",\"B\")");
+        assertThat(decision(e, "Scores").formatted()).isEqualTo("null");
+        assertThat(decision(e, "Scores").messages().getFirst().text()).contains("item 2 of tScores");
+        assertThat(decision(e, "One").formatted()).isEqualTo("[7]");
+        assertThat(decision(e, "Person").formatted()).isEqualTo("null");
+        assertThat(decision(e, "Person").messages().getFirst().text()).contains("tPerson.age: string \"old\" is not a number");
+        assertThat(decision(e, "Fine").hasErrors()).isFalse();
+        assertThat(decision(e, "Day").formatted()).isEqualTo("date and time(\"2024-01-31T00:00:00Z\")");
+        assertThat(decision(e, "BadInput").formatted()).isEqualTo("null");
+        assertThat(decision(e, "BadInput").matchedRules()).isEmpty();
+        assertThat(decision(e, "BadInput").messages().getFirst().text()).contains("Input 1: number 5 is not in the input values");
+        assertThat(decision(e, "BadOutput").formatted()).isEqualTo("null");
+        assertThat(decision(e, "BadOutput").messages().getFirst().text()).contains("Rule 1, output 1: string \"z\" is not in the output values");
+        assertThat(decision(e, "Call").formatted()).isEqualTo("\"null\"");
+        assertThat(decision(e, "Call").messages().getFirst().text()).contains("Parameter 'n': string \"2\" is not a number");
+    }
+
+    @Test
     void quotesNamesOutsideStrings() {
         Feel.Result r = FEEL.evaluate("Guest Count + 1", Scope.root(Feel.QuotedNames.of(List.of("Guest Count")))
                 .put("Guest Count", Values.number(2)));
